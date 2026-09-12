@@ -92,27 +92,19 @@ public class LockTodoWidget extends AppWidgetProvider {
 
         boolean lightText = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);
         boolean empty = items.isEmpty();
-        boolean showEmptyPanel = prefs.getBoolean(AppPrefs.KEY_SHOW_EMPTY_PANEL, false);
-        int fillAlpha = prefs.getInt(AppPrefs.KEY_FILL_ALPHA, 18);
-        int borderAlpha = prefs.getInt(AppPrefs.KEY_BORDER_ALPHA, 25);
-
-        int bgRes = lightText ? R.drawable.widget_panel_bg_dark : R.drawable.widget_panel_bg_light;
-        int borderRes = lightText ? R.drawable.widget_panel_border_light : R.drawable.widget_panel_border_dark;
-        views.setInt(R.id.panel_bg, "setBackgroundResource", bgRes);
-        views.setInt(R.id.panel_border, "setBackgroundResource", borderRes);
-        views.setFloat(R.id.panel_bg, "setAlpha", (empty && !showEmptyPanel) ? 0f : clamp01(fillAlpha / 100f));
-        views.setFloat(R.id.panel_border, "setAlpha", (empty && !showEmptyPanel) ? 0f : clamp01(borderAlpha / 100f));
 
         int hPadding = prefs.getInt(AppPrefs.KEY_HORIZONTAL_PADDING, 8);
         views.setViewPadding(R.id.content_container, dp(context, hPadding), 0, dp(context, hPadding), 0);
 
         Intent addIntent = new Intent(context, QuickTodoActivity.class);
+        addIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent addPending = PendingIntent.getActivity(
                 context,
                 200000 + appWidgetId,
                 addIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
+        views.setOnClickPendingIntent(R.id.widget_root, addPending);
         views.setOnClickPendingIntent(R.id.blank_click_area, addPending);
         views.setOnClickPendingIntent(R.id.add_button, addPending);
 
@@ -168,6 +160,7 @@ public class LockTodoWidget extends AppWidgetProvider {
             views.setOnClickPendingIntent(checkId, completePending);
 
             Intent edit = new Intent(context, QuickTodoActivity.class);
+            edit.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             edit.putExtra(QuickTodoActivity.EXTRA_EDIT_INDEX, i);
             PendingIntent editPending = PendingIntent.getActivity(
                     context,
@@ -178,6 +171,7 @@ public class LockTodoWidget extends AppWidgetProvider {
             views.setOnClickPendingIntent(textId, editPending);
 
             Intent reorder = new Intent(context, ReorderActivity.class);
+            reorder.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             PendingIntent reorderPending = PendingIntent.getActivity(
                     context,
                     500000 + appWidgetId * 10 + i,
@@ -193,6 +187,7 @@ public class LockTodoWidget extends AppWidgetProvider {
             views.setTextViewText(R.id.more_count, "… " + hidden);
             views.setTextColor(R.id.more_count, handleColor);
             Intent reorder = new Intent(context, ReorderActivity.class);
+            reorder.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             PendingIntent reorderPending = PendingIntent.getActivity(
                     context,
                     590000 + appWidgetId,

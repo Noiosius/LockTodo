@@ -46,4 +46,28 @@ final class TodoStore {
         items.add(value);
         save(items);
     }
+
+    synchronized void replaceAt(int index, String text) {
+        String value = text == null ? "" : text.trim();
+        List<String> items = load();
+        if (index < 0 || index >= items.size()) return;
+        if (value.isEmpty()) items.remove(index);
+        else items.set(index, value);
+        save(items);
+    }
+
+    synchronized void removeAt(int index) {
+        List<String> items = load();
+        if (index < 0 || index >= items.size()) return;
+        items.remove(index);
+        save(items);
+    }
+
+    synchronized void move(int from, int to) {
+        List<String> items = load();
+        if (from < 0 || from >= items.size() || to < 0 || to >= items.size() || from == to) return;
+        String item = items.remove(from);
+        items.add(to, item);
+        save(items);
+    }
 }

@@ -92,6 +92,17 @@ public class LockTodoWidget extends AppWidgetProvider {
 
         boolean lightText = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);
         boolean empty = items.isEmpty();
+        boolean showEmptyPanel = prefs.getBoolean(AppPrefs.KEY_SHOW_EMPTY_PANEL, false);
+        int fillAlpha = prefs.getInt(AppPrefs.KEY_FILL_ALPHA, 0);
+        int borderAlpha = prefs.getInt(AppPrefs.KEY_BORDER_ALPHA, 0);
+
+        int bgRes = lightText ? R.drawable.widget_panel_bg_dark : R.drawable.widget_panel_bg_light;
+        int borderRes = lightText ? R.drawable.widget_panel_border_light : R.drawable.widget_panel_border_dark;
+        views.setInt(R.id.panel_bg, "setBackgroundResource", bgRes);
+        views.setInt(R.id.panel_border, "setBackgroundResource", borderRes);
+        float panelVisibility = (empty && !showEmptyPanel) ? 0f : 1f;
+        views.setFloat(R.id.panel_bg, "setAlpha", panelVisibility * clamp01(fillAlpha / 100f));
+        views.setFloat(R.id.panel_border, "setAlpha", panelVisibility * clamp01(borderAlpha / 100f));
 
         int hPadding = prefs.getInt(AppPrefs.KEY_HORIZONTAL_PADDING, 8);
         views.setViewPadding(R.id.content_container, dp(context, hPadding), 0, dp(context, hPadding), 0);

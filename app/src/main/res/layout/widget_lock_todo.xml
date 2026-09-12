@@ -5,6 +5,21 @@
     android:layout_height="match_parent"
     android:background="@android:color/transparent">
 
+    <!-- Optional panel layers. Kept inset so rounded edges are not clipped by hosts. -->
+    <FrameLayout
+        android:id="@+id/panel_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_margin="6dp"
+        android:background="@drawable/widget_panel_bg_dark" />
+
+    <FrameLayout
+        android:id="@+id/panel_border"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_margin="6dp"
+        android:background="@drawable/widget_panel_border_light" />
+
     <LinearLayout
         android:id="@+id/content_container"
         android:layout_width="match_parent"

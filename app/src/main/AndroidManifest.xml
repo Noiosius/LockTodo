@@ -1,21 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
         android:icon="@drawable/ic_lock_todo"
-        android:label="@string/app_name"
+        android:label="Lock Todo"
         android:supportsRtl="true"
-        android:theme="@style/Theme.LockTodo.Settings">
+        android:theme="@style/Theme.LockTodo">
 
         <activity
             android:name=".SettingsActivity"
-            android:exported="true"
-            android:theme="@style/Theme.LockTodo.Settings">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -23,26 +20,31 @@
         </activity>
 
         <activity
-            android:name=".LockTodoActivity"
+            android:name=".QuickTodoActivity"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:launchMode="singleTop"
+            android:noHistory="true"
             android:showWhenLocked="true"
-            android:turnScreenOn="true"
-            android:theme="@style/Theme.LockTodo.Transparent" />
+            android:theme="@style/Theme.LockTodo.Dialog" />
 
-        <service
-            android:name=".LockService"
-            android:enabled="true"
-            android:exported="false" />
+        <activity
+            android:name=".ReorderActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:theme="@style/Theme.LockTodo.Dialog" />
 
         <receiver
-            android:name=".BootReceiver"
-            android:enabled="true"
+            android:name=".LockTodoWidget"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/lock_todo_widget_info" />
         </receiver>
+
     </application>
 </manifest>

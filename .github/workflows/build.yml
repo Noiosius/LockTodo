@@ -30,7 +30,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build debug APKs
-        run: gradle --no-daemon :app:assembleDebug :batterycheck:assembleDebug
+        run: gradle --no-daemon :app:assembleDebug :batterycheck:assembleDebug :daycount:assembleDebug
 
       - name: Upload LockTodo APK
         uses: actions/upload-artifact@v4
@@ -44,4 +44,11 @@ jobs:
         with:
           name: Battery-Check-v1.1-apk
           path: batterycheck/build/outputs/apk/debug/batterycheck-debug.apk
+          if-no-files-found: error
+
+      - name: Upload Day Count APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Day-Count-v0.1-apk
+          path: daycount/build/outputs/apk/debug/daycount-debug.apk
           if-no-files-found: error

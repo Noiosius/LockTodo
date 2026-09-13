@@ -3,6 +3,7 @@ package com.daycount.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -62,14 +63,22 @@ public class MainActivity extends Activity {
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        TextView settings = new TextView(this);
+        settings.setText("⚙");
+        settings.setTextColor(Color.rgb(205, 205, 205));
+        settings.setTextSize(22);
+        settings.setGravity(Gravity.CENTER);
+        settings.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, SettingsActivity.class)));
+        header.addView(settings, new LinearLayout.LayoutParams(dp(48), dp(54)));
+
         TextView add = new TextView(this);
         add.setText("+");
         add.setTextColor(Color.WHITE);
         add.setTextSize(30);
         add.setGravity(Gravity.CENTER);
-        add.setPadding(dp(14), dp(2), dp(6), dp(6));
+        add.setPadding(dp(6), dp(2), dp(2), dp(6));
         add.setOnClickListener(v -> showEditor(null));
-        header.addView(add, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        header.addView(add, new LinearLayout.LayoutParams(dp(48), dp(54)));
         root.addView(header);
 
         TextView guide = new TextView(this);

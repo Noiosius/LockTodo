@@ -41,8 +41,17 @@ public class DayCountWidget extends AppWidgetProvider {
         String text = selected == null ? "—" : formatCount(selected.date);
 
         views.setTextViewText(R.id.day_count_text, text);
-        float size = text.length() <= 4 ? 44f : (text.length() <= 6 ? 36f : 30f);
-        views.setTextViewTextSize(R.id.day_count_text, TypedValue.COMPLEX_UNIT_SP, size);
+        views.setTextViewTextSize(
+                R.id.day_count_text,
+                TypedValue.COMPLEX_UNIT_SP,
+                WidgetPrefs.textSize(context)
+        );
+        views.setTextColor(R.id.day_count_text, WidgetPrefs.textColor(context));
+        views.setInt(
+                R.id.day_count_text,
+                "setGravity",
+                WidgetPrefs.gravityForPosition(WidgetPrefs.position(context))
+        );
 
         Intent open = new Intent(context, MainActivity.class);
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);

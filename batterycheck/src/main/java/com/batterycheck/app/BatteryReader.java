@@ -9,6 +9,8 @@ import android.text.format.DateFormat;
 import java.util.Date;
 
 final class BatteryReader {
+    private static final double S21_FALLBACK_CAPACITY_MAH = 4000.0;
+
     static final class Snapshot {
         final boolean charging;
         final int level;
@@ -56,36 +58,56 @@ final class BatteryReader {
 
         BatteryManager manager = (BatteryManager) context.getSystemService(Context.BATTERY_SERVICE);
         double watts = Double.NaN;
+        double avgPercentPerHour = Double.NaN;
+        long remainingMinutes = -1;
         long remainingMs = -1;
 
-        if (manager != null) {
-            int currentUa = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
-            if (currentUa == Integer.MIN_VALUE || currentUa == 0) {
-                currentUa = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
+        if (manager != null && charging) {
+            int currentNowRaw = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
+            int currentAverageRaw = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
+
+            double currentNowMa = normalizeCurrentMa(currentNowRaw);
+            double currentAverageMa = normalizeCurrentMa(currentAverageRaw);
+
+            if (!Double.isNaN(currentNowMa) && voltageMv > 0) {
+                watts = Math.abs(currentNowMa) / 1000.0 * (voltageMv / 1000.0);
             }
 
-            if (voltageMv > 0 && currentUa != Integer.MIN_VALUE && currentUa != 0) {
-                watts = Math.abs(currentUa) / 1_000_000.0 * (voltageMv / 1000.0);
-            }
+            double currentForSpeedMa = !Double.isNaN(currentAverageMa)
+                    ? Math.abs(currentAverageMa)
+                    : (!Double.isNaN(currentNowMa) ? Math.abs(currentNowMa) : Double.NaN);
 
-            if (charging) {
-                try {
-                    remainingMs = manager.computeChargeTimeRemaining();
-                } catch (Throwable ignored) {
-                    remainingMs = -1;
+            double fullCapacityMah = estimateFullCapacityMah(manager, level);
+            if (!Double.isNaN(currentForSpeedMa) && currentForSpeedMa > 0
+                    && fullCapacityMah > 0 && level >= 0 && level < 100) {
+                avgPercentPerHour = currentForSpeedMa / fullCapacityMah * 100.0;
+
+                // Reject obviously invalid vendor readings and fall back to the system estimate below.
+                if (avgPercentPerHour >= 3.0 && avgPercentPerHour <= 250.0) {
+                    remainingMinutes = Math.max(1,
+                            Math.round((100.0 - level) / avgPercentPerHour * 60.0));
+                    remainingMs = remainingMinutes * 60_000L;
+                } else {
+                    avgPercentPerHour = Double.NaN;
                 }
             }
-        }
 
-        long remainingMinutes = remainingMs > 0
-                ? Math.max(1, Math.round(remainingMs / 60000.0))
-                : -1;
-
-        double avgPercentPerHour = Double.NaN;
-        if (remainingMs > 0 && level >= 0 && level < 100) {
-            double hours = remainingMs / 3_600_000.0;
-            if (hours > 0.0) {
-                avgPercentPerHour = (100.0 - level) / hours;
+            // Only use Android's estimate as a fallback. It is deliberately not used to derive
+            // the displayed average speed, because that made the two values circular in v0.1.
+            if (remainingMinutes <= 0) {
+                try {
+                    long systemRemainingMs = manager.computeChargeTimeRemaining();
+                    if (systemRemainingMs > 0) {
+                        remainingMs = systemRemainingMs;
+                        remainingMinutes = Math.max(1, Math.round(systemRemainingMs / 60000.0));
+                        if (Double.isNaN(avgPercentPerHour) && level >= 0 && level < 100) {
+                            double hours = systemRemainingMs / 3_600_000.0;
+                            if (hours > 0) avgPercentPerHour = (100.0 - level) / hours;
+                        }
+                    }
+                } catch (Throwable ignored) {
+                    // No estimate available on this device.
+                }
             }
         }
 
@@ -104,5 +126,35 @@ final class BatteryReader {
                 remainingMinutes,
                 fullTime
         );
+    }
+
+    /**
+     * Android documents CURRENT_NOW/CURRENT_AVERAGE in microamps, but several Samsung devices
+     * expose milliamp-sized values. Values in the normal phone-charging mA range are therefore
+     * treated as mA; larger values are treated as microamps.
+     */
+    private static double normalizeCurrentMa(int raw) {
+        if (raw == Integer.MIN_VALUE || raw == 0) return Double.NaN;
+        double abs = Math.abs((double) raw);
+        return abs < 20_000.0 ? abs : abs / 1000.0;
+    }
+
+    private static double estimateFullCapacityMah(BatteryManager manager, int level) {
+        if (level > 5 && level <= 100) {
+            int rawChargeCounter = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER);
+            if (rawChargeCounter != Integer.MIN_VALUE && rawChargeCounter > 0) {
+                double counterMah = rawChargeCounter > 100_000
+                        ? rawChargeCounter / 1000.0
+                        : rawChargeCounter;
+                double estimatedFullMah = counterMah / (level / 100.0);
+
+                // S21 nominal capacity is 4000 mAh. Keep only plausible learned values so a
+                // vendor-specific/unsupported charge counter cannot distort the result.
+                if (estimatedFullMah >= 2500.0 && estimatedFullMah <= 5000.0) {
+                    return estimatedFullMah;
+                }
+            }
+        }
+        return S21_FALLBACK_CAPACITY_MAH;
     }
 }

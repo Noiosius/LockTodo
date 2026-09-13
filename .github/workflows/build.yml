@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APKs
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: locktodo-apk-main
+  group: android-apk-main
   cancel-in-progress: true
 
 jobs:
@@ -33,12 +33,19 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Build debug APKs
+        run: gradle --no-daemon :app:assembleDebug :batterycheck:assembleDebug
 
-      - name: Upload APK
+      - name: Upload LockTodo APK
         uses: actions/upload-artifact@v4
         with:
           name: LockTodo-v0.7-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload Battery Check APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Battery-Check-v0.1-apk
+          path: batterycheck/build/outputs/apk/debug/batterycheck-debug.apk
           if-no-files-found: error

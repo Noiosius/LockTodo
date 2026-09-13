@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
     private final Runnable refreshTask = new Runnable() {
         @Override public void run() {
             refreshValues();
-            handler.postDelayed(this, 1000);
+            handler.postDelayed(this, 500);
         }
     };
 
@@ -107,7 +107,7 @@ public class MainActivity extends Activity {
 
         powerMetric = addMetric(card, "충전 전력", textScale, false);
         addDivider(card);
-        speedMetric = addMetric(card, "평균 속도", textScale, false);
+        speedMetric = addMetric(card, "충전 속도", textScale, false);
         addDivider(card);
         remainingMetric = addMetric(card, "남은 시간", textScale, true);
         addDivider(card);

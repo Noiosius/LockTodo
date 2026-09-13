@@ -65,7 +65,7 @@ public class LockTodoWidget extends AppWidgetProvider {
         Context app = context.getApplicationContext();
         new Thread(() -> {
             try {
-                int delay = prefs.getInt(AppPrefs.KEY_CHECK_DELAY, 240);
+                int delay = prefs.getInt(AppPrefs.KEY_CHECK_DELAY, 300);
                 Thread.sleep(Math.max(0, delay));
                 new TodoStore(app).removeAt(index);
                 AppPrefs.get(app).edit().putInt(AppPrefs.KEY_CHECKING_INDEX, -1).apply();
@@ -93,16 +93,16 @@ public class LockTodoWidget extends AppWidgetProvider {
         boolean lightText = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);
         boolean empty = items.isEmpty();
         boolean showEmptyPanel = prefs.getBoolean(AppPrefs.KEY_SHOW_EMPTY_PANEL, false);
-        int fillAlpha = prefs.getInt(AppPrefs.KEY_FILL_ALPHA, 0);
-        int borderAlpha = prefs.getInt(AppPrefs.KEY_BORDER_ALPHA, 0);
+        int fillTransparency = prefs.getInt(AppPrefs.KEY_FILL_ALPHA, 100);
+        int borderTransparency = prefs.getInt(AppPrefs.KEY_BORDER_ALPHA, 100);
 
         int bgRes = lightText ? R.drawable.widget_panel_bg_dark : R.drawable.widget_panel_bg_light;
         int borderRes = lightText ? R.drawable.widget_panel_border_light : R.drawable.widget_panel_border_dark;
         views.setInt(R.id.panel_bg, "setBackgroundResource", bgRes);
         views.setInt(R.id.panel_border, "setBackgroundResource", borderRes);
         float panelVisibility = (empty && !showEmptyPanel) ? 0f : 1f;
-        views.setFloat(R.id.panel_bg, "setAlpha", panelVisibility * clamp01(fillAlpha / 100f));
-        views.setFloat(R.id.panel_border, "setAlpha", panelVisibility * clamp01(borderAlpha / 100f));
+        views.setFloat(R.id.panel_bg, "setAlpha", panelVisibility * opacityFromTransparency(fillTransparency));
+        views.setFloat(R.id.panel_border, "setAlpha", panelVisibility * opacityFromTransparency(borderTransparency));
 
         int hPadding = prefs.getInt(AppPrefs.KEY_HORIZONTAL_PADDING, 8);
         views.setViewPadding(R.id.content_container, dp(context, hPadding), 0, dp(context, hPadding), 0);
@@ -122,14 +122,13 @@ public class LockTodoWidget extends AppWidgetProvider {
         boolean showPlus = prefs.getBoolean(AppPrefs.KEY_SHOW_PLUS, true);
         boolean hidePlusWhenEmpty = prefs.getBoolean(AppPrefs.KEY_HIDE_PLUS_WHEN_EMPTY, true);
         boolean plusVisible = showPlus && !(empty && hidePlusWhenEmpty);
+        views.setViewVisibility(R.id.add_row, plusVisible ? View.VISIBLE : View.GONE);
         views.setViewVisibility(R.id.add_button, plusVisible ? View.VISIBLE : View.GONE);
-        views.setTextViewTextSize(R.id.add_button, TypedValue.COMPLEX_UNIT_SP, prefs.getInt(AppPrefs.KEY_PLUS_SIZE, 16));
-        views.setFloat(R.id.add_button, "setAlpha", clamp01(prefs.getInt(AppPrefs.KEY_PLUS_ALPHA, 25) / 100f));
 
         for (int rowId : ROW_IDS) views.setViewVisibility(rowId, View.GONE);
 
         int textSize = prefs.getInt(AppPrefs.KEY_TEXT_SIZE, 16);
-        int textAlpha = prefs.getInt(AppPrefs.KEY_TEXT_ALPHA, 100);
+        int textTransparency = prefs.getInt(AppPrefs.KEY_TEXT_ALPHA, 0);
         int rowPadding = prefs.getInt(AppPrefs.KEY_ROW_PADDING, 5);
         int maxRows = Math.min(8, prefs.getInt(AppPrefs.KEY_MAX_ROWS, 8));
         int checkingIndex = prefs.getInt(AppPrefs.KEY_CHECKING_INDEX, -1);
@@ -137,9 +136,13 @@ public class LockTodoWidget extends AppWidgetProvider {
         int visibleCount = Math.min(items.size(), Math.min(8, capacity));
 
         int base = lightText ? 255 : 0;
-        int textColor = Color.argb(alpha255(textAlpha), base, base, base);
-        int checkColor = Color.argb(alpha255(prefs.getInt(AppPrefs.KEY_CHECK_ALPHA, 90)), base, base, base);
-        int handleColor = Color.argb(alpha255(prefs.getInt(AppPrefs.KEY_HANDLE_ALPHA, 55)), base, base, base);
+        int textColor = Color.argb(alpha255FromTransparency(textTransparency), base, base, base);
+        int checkColor = Color.argb(alpha255FromTransparency(prefs.getInt(AppPrefs.KEY_CHECK_ALPHA, 10)), base, base, base);
+        int handleColor = Color.argb(alpha255FromTransparency(prefs.getInt(AppPrefs.KEY_HANDLE_ALPHA, 45)), base, base, base);
+        int plusColor = Color.argb(alpha255FromTransparency(prefs.getInt(AppPrefs.KEY_PLUS_ALPHA, 45)), base, base, base);
+
+        views.setTextViewTextSize(R.id.add_button, TypedValue.COMPLEX_UNIT_SP, prefs.getInt(AppPrefs.KEY_PLUS_SIZE, 17));
+        views.setTextColor(R.id.add_button, plusColor);
 
         for (int i = 0; i < visibleCount; i++) {
             int rowId = ROW_IDS[i];
@@ -149,7 +152,7 @@ public class LockTodoWidget extends AppWidgetProvider {
 
             views.setViewVisibility(rowId, View.VISIBLE);
             views.setTextViewText(textId, items.get(i));
-            views.setTextViewText(checkId, i == checkingIndex ? "✓" : "○");
+            views.setTextViewText(checkId, i == checkingIndex ? "●" : "○");
             views.setTextViewText(handleId, "≡");
             views.setTextColor(textId, textColor);
             views.setTextColor(checkId, checkColor);
@@ -234,11 +237,13 @@ public class LockTodoWidget extends AppWidgetProvider {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
-    private static int alpha255(int percent) {
-        return Math.max(0, Math.min(255, Math.round(percent * 2.55f)));
+    private static int alpha255FromTransparency(int transparency) {
+        int clamped = Math.max(0, Math.min(100, transparency));
+        return Math.max(0, Math.min(255, Math.round((100 - clamped) * 2.55f)));
     }
 
-    private static float clamp01(float value) {
-        return Math.max(0f, Math.min(1f, value));
+    private static float opacityFromTransparency(int transparency) {
+        int clamped = Math.max(0, Math.min(100, transparency));
+        return (100 - clamped) / 100f;
     }
 }

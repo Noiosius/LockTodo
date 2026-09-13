@@ -6,10 +6,16 @@ import android.content.IntentFilter;
 import android.os.BatteryManager;
 import android.text.format.DateFormat;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 
 final class BatteryReader {
     private static final double S21_FALLBACK_CAPACITY_MAH = 4000.0;
+    private static final int CURRENT_SAMPLE_WINDOW = 5;
+    private static final ArrayDeque<Double> currentSamplesMa = new ArrayDeque<>();
 
     static final class Snapshot {
         final boolean charging;
@@ -58,67 +64,67 @@ final class BatteryReader {
 
         BatteryManager manager = (BatteryManager) context.getSystemService(Context.BATTERY_SERVICE);
         double watts = Double.NaN;
-        double avgPercentPerHour = Double.NaN;
+        double chargeSpeedPercentPerHour = Double.NaN;
         long remainingMinutes = -1;
         long remainingMs = -1;
 
-        if (manager != null && charging) {
-            ChargeSession.ensureStarted(context);
+        if (!charging) {
+            clearCurrentSamples();
+        }
 
+        if (manager != null && charging) {
             int currentNowRaw = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
             int currentAverageRaw = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
 
             double currentNowMa = normalizeCurrentMa(currentNowRaw);
             double currentAverageMa = normalizeCurrentMa(currentAverageRaw);
 
-            // Live battery-side charging power. Samsung often reports current in mA instead of
-            // the Android-documented uA, so normalizeCurrentMa() handles both scales.
-            if (!Double.isNaN(currentNowMa) && voltageMv > 0) {
-                watts = Math.abs(currentNowMa) / 1000.0 * (voltageMv / 1000.0);
+            // Prefer the live current. If a device momentarily reports no live value, use its
+            // hardware-averaged current as a fallback. The same smoothed current drives BOTH W
+            // and %/h so the two values always describe the same charging state.
+            double sampleMa = !Double.isNaN(currentNowMa)
+                    ? Math.abs(currentNowMa)
+                    : (!Double.isNaN(currentAverageMa) ? Math.abs(currentAverageMa) : Double.NaN);
+
+            double smoothedCurrentMa = addAndGetSmoothedCurrent(sampleMa);
+
+            if (!Double.isNaN(smoothedCurrentMa) && voltageMv > 0) {
+                watts = smoothedCurrentMa / 1000.0 * (voltageMv / 1000.0);
             }
 
-            // Primary value: actual gain during this charging session, matching the concept used
-            // by AccuBattery's charge-speed (%/h) field.
-            avgPercentPerHour = ChargeSession.getPercentPerHour(context, level);
+            double fullCapacityMah = estimateFullCapacityMah(manager, level);
+            if (!Double.isNaN(smoothedCurrentMa) && smoothedCurrentMa > 0.0
+                    && fullCapacityMah > 0.0) {
+                // Instant-equivalent charging speed: if the present net charging current stayed
+                // the same for one hour, approximately this many battery percentage points would
+                // be added. This is intentionally NOT a charging-session average.
+                chargeSpeedPercentPerHour = smoothedCurrentMa / fullCapacityMah * 100.0;
 
-            // During the first minute or before enough charge has accumulated, use the phone's
-            // average current as a temporary estimate so the field is not blank.
-            if (Double.isNaN(avgPercentPerHour)) {
-                double currentForSpeedMa = !Double.isNaN(currentAverageMa)
-                        ? Math.abs(currentAverageMa)
-                        : (!Double.isNaN(currentNowMa) ? Math.abs(currentNowMa) : Double.NaN);
-                double fullCapacityMah = estimateFullCapacityMah(manager, level);
-                if (!Double.isNaN(currentForSpeedMa) && currentForSpeedMa > 0
-                        && fullCapacityMah > 0) {
-                    double estimatedSpeed = currentForSpeedMa / fullCapacityMah * 100.0;
-                    if (estimatedSpeed >= 3.0 && estimatedSpeed <= 250.0) {
-                        avgPercentPerHour = estimatedSpeed;
-                    }
+                if (chargeSpeedPercentPerHour < 0.1 || chargeSpeedPercentPerHour > 300.0) {
+                    chargeSpeedPercentPerHour = Double.NaN;
                 }
             }
 
-            if (!Double.isNaN(avgPercentPerHour) && avgPercentPerHour > 0
+            // Remaining time is intentionally based on the same present charging speed, so it is
+            // internally consistent with the %/h field. Near full charge Android may taper current,
+            // so this is a "current-rate" estimate rather than a prediction of future tapering.
+            if (!Double.isNaN(chargeSpeedPercentPerHour) && chargeSpeedPercentPerHour > 0.0
                     && level >= 0 && level < 100) {
                 remainingMinutes = Math.max(1,
-                        Math.round((100.0 - level) / avgPercentPerHour * 60.0));
+                        Math.round((100.0 - level) / chargeSpeedPercentPerHour * 60.0));
                 remainingMs = remainingMinutes * 60_000L;
             } else if (level >= 100) {
                 remainingMinutes = 0;
                 remainingMs = 0;
             }
 
-            // Last fallback only: Android/Samsung's own estimate. Unlike v0.1, this value no longer
-            // determines the displayed speed when our session/current data are available.
+            // Last-resort fallback only when the phone does not expose usable charging current.
             if (remainingMinutes < 0) {
                 try {
                     long systemRemainingMs = manager.computeChargeTimeRemaining();
                     if (systemRemainingMs > 0) {
                         remainingMs = systemRemainingMs;
                         remainingMinutes = Math.max(1, Math.round(systemRemainingMs / 60000.0));
-                        if (Double.isNaN(avgPercentPerHour) && level >= 0 && level < 100) {
-                            double hours = systemRemainingMs / 3_600_000.0;
-                            if (hours > 0) avgPercentPerHour = (100.0 - level) / hours;
-                        }
                     }
                 } catch (Throwable ignored) {
                     // Not available on every device.
@@ -138,11 +144,37 @@ final class BatteryReader {
                 charging,
                 level,
                 watts,
-                avgPercentPerHour,
+                chargeSpeedPercentPerHour,
                 temperatureC,
                 remainingMinutes,
                 fullTime
         );
+    }
+
+    private static synchronized double addAndGetSmoothedCurrent(double sampleMa) {
+        if (!Double.isNaN(sampleMa) && sampleMa > 0.0) {
+            currentSamplesMa.addLast(sampleMa);
+            while (currentSamplesMa.size() > CURRENT_SAMPLE_WINDOW) {
+                currentSamplesMa.removeFirst();
+            }
+        }
+
+        if (currentSamplesMa.isEmpty()) return Double.NaN;
+
+        List<Double> values = new ArrayList<>(currentSamplesMa);
+        Collections.sort(values);
+
+        // Once five readings are available, discard one high and one low outlier and average
+        // the middle three. Before that, simply average the readings collected so far.
+        int start = values.size() >= 5 ? 1 : 0;
+        int end = values.size() >= 5 ? values.size() - 1 : values.size();
+        double total = 0.0;
+        for (int i = start; i < end; i++) total += values.get(i);
+        return total / (end - start);
+    }
+
+    private static synchronized void clearCurrentSamples() {
+        currentSamplesMa.clear();
     }
 
     private static double normalizeCurrentMa(int raw) {

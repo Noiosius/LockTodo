@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.BatteryCheck.Overlay" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#FFFFFFFF</item>
+    </style>
+
+    <style name="Theme.BatteryCheck.Settings" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF0C0C0C</item>
+        <item name="android:colorAccent">#FFFFFFFF</item>
+        <item name="android:navigationBarColor">#FF000000</item>
+        <item name="android:statusBarColor">#FF000000</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+</resources>

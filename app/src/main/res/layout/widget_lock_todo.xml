@@ -5,7 +5,6 @@
     android:layout_height="match_parent"
     android:background="@android:color/transparent">
 
-    <!-- Optional panel layers. Kept inset so rounded edges are not clipped by hosts. -->
     <FrameLayout
         android:id="@+id/panel_bg"
         android:layout_width="match_parent"
@@ -30,49 +29,49 @@
 
         <LinearLayout android:id="@+id/row1" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
             <TextView android:id="@+id/check1" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="○" />
-            <TextView android:id="@+id/text1" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/text1" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:paddingLeft="3dp" android:maxLines="1" android:ellipsize="end" />
             <TextView android:id="@+id/handle1" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="≡" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/row2" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
             <TextView android:id="@+id/check2" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="○" />
-            <TextView android:id="@+id/text2" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/text2" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:paddingLeft="3dp" android:maxLines="1" android:ellipsize="end" />
             <TextView android:id="@+id/handle2" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="≡" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/row3" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
             <TextView android:id="@+id/check3" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="○" />
-            <TextView android:id="@+id/text3" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/text3" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:paddingLeft="3dp" android:maxLines="1" android:ellipsize="end" />
             <TextView android:id="@+id/handle3" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="≡" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/row4" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
             <TextView android:id="@+id/check4" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="○" />
-            <TextView android:id="@+id/text4" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/text4" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:paddingLeft="3dp" android:maxLines="1" android:ellipsize="end" />
             <TextView android:id="@+id/handle4" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="≡" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/row5" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
             <TextView android:id="@+id/check5" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="○" />
-            <TextView android:id="@+id/text5" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/text5" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:paddingLeft="3dp" android:maxLines="1" android:ellipsize="end" />
             <TextView android:id="@+id/handle5" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="≡" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/row6" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
             <TextView android:id="@+id/check6" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="○" />
-            <TextView android:id="@+id/text6" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/text6" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:paddingLeft="3dp" android:maxLines="1" android:ellipsize="end" />
             <TextView android:id="@+id/handle6" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="≡" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/row7" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
             <TextView android:id="@+id/check7" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="○" />
-            <TextView android:id="@+id/text7" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/text7" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:paddingLeft="3dp" android:maxLines="1" android:ellipsize="end" />
             <TextView android:id="@+id/handle7" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="≡" />
         </LinearLayout>
 
         <LinearLayout android:id="@+id/row8" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
             <TextView android:id="@+id/check8" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="○" />
-            <TextView android:id="@+id/text8" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/text8" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:gravity="center_vertical" android:paddingLeft="3dp" android:maxLines="1" android:ellipsize="end" />
             <TextView android:id="@+id/handle8" android:layout_width="34dp" android:layout_height="40dp" android:gravity="center" android:text="≡" />
         </LinearLayout>
 
@@ -93,16 +92,23 @@
             android:layout_weight="1"
             android:minHeight="40dp"
             android:background="@android:color/transparent" />
-    </LinearLayout>
 
-    <TextView
-        android:id="@+id/add_button"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:layout_gravity="end|bottom"
-        android:gravity="center"
-        android:text="+"
-        android:textColor="#FFFFFFFF"
-        android:textSize="16sp" />
+        <LinearLayout
+            android:id="@+id/add_row"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:gravity="end|center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/add_button"
+                android:layout_width="34dp"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:text="+"
+                android:textColor="#FFFFFFFF"
+                android:textSize="17sp" />
+        </LinearLayout>
+    </LinearLayout>
 
 </FrameLayout>

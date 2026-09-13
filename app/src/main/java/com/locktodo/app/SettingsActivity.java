@@ -42,7 +42,7 @@ public class SettingsActivity extends Activity {
         TextView title = text("Lock Todo", 24, Color.WHITE);
         content.addView(title);
 
-        TextView subtitle = text("v0.6 통합판 · Todo 위젯 + 빠른 입력 + 체크 + 순서 변경 + 설정 + TEST 위젯", 13, Color.argb(160, 255, 255, 255));
+        TextView subtitle = text("v0.7 · 잠금화면 Todo 위젯", 13, Color.argb(160, 255, 255, 255));
         subtitle.setPadding(0, dp(4), 0, dp(18));
         content.addView(subtitle);
 
@@ -103,73 +103,53 @@ public class SettingsActivity extends Activity {
         actionRow1.addView(reorder, weighted());
         content.addView(actionRow1, matchWrap());
 
-        LinearLayout actionRow2 = new LinearLayout(this);
-        actionRow2.setOrientation(LinearLayout.HORIZONTAL);
-        Button addTests = smallButton("테스트 3개");
-        addTests.setOnClickListener(v -> {
-            TodoStore store = new TodoStore(this);
-            store.add("테스트 1");
-            store.add("테스트 2");
-            store.add("테스트 3");
-            LockTodoWidget.updateAll(this);
-            render();
-        });
-        actionRow2.addView(addTests, weighted());
-        Button clear = smallButton("전부 지우기");
+        Button clear = new Button(this);
+        clear.setText("Todo 전부 지우기");
+        clear.setAllCaps(false);
         clear.setOnClickListener(v -> {
             new TodoStore(this).save(java.util.Collections.emptyList());
             LockTodoWidget.updateAll(this);
             render();
         });
-        actionRow2.addView(clear, weighted());
-        content.addView(actionRow2, matchWrap());
+        content.addView(clear, matchWrap());
 
-        Button refresh = new Button(this);
-        refresh.setText("위젯 강제 새로고침");
-        refresh.setAllCaps(false);
-        refresh.setOnClickListener(v -> LockTodoWidget.updateAll(this));
-        content.addView(refresh, matchWrap());
-
-        section("위젯 추가 / 진단");
+        section("위젯");
         Button addWidget = new Button(this);
         addWidget.setText("LockTodo 위젯 추가 요청");
         addWidget.setAllCaps(false);
-        addWidget.setOnClickListener(v -> requestWidget(LockTodoWidget.class));
+        addWidget.setOnClickListener(v -> requestWidget());
         content.addView(addWidget, matchWrap());
 
-        Button addTestWidget = new Button(this);
-        addTestWidget.setText("LockTodo TEST 4x2 추가 요청");
-        addTestWidget.setAllCaps(false);
-        addTestWidget.setOnClickListener(v -> requestWidget(LockTodoStaticTestWidget.class));
-        content.addView(addTestWidget, matchWrap());
-
-        TextView guide = text("홈 화면/LockStar에서 직접 위젯을 추가하는 방식도 사용할 수 있습니다. TEST 4x2 위젯은 호환성 확인용으로 그대로 포함했습니다.", 13, Color.argb(185, 255, 255, 255));
-        guide.setLineSpacing(0, 1.15f);
+        TextView guide = text("홈 화면 또는 LockStar에서 LockTodo 위젯을 직접 추가해도 됩니다.", 13, Color.argb(185, 255, 255, 255));
         guide.setPadding(0, dp(12), 0, dp(14));
         content.addView(guide);
 
         section("표시");
         slider("글자 크기", AppPrefs.KEY_TEXT_SIZE, 10, 30, 16, "sp");
-        slider("글자 투명도", AppPrefs.KEY_TEXT_ALPHA, 10, 100, 100, "%");
-        slider("배경 투명도", AppPrefs.KEY_FILL_ALPHA, 0, 80, 0, "%");
-        slider("테두리 투명도", AppPrefs.KEY_BORDER_ALPHA, 0, 100, 0, "%");
+        slider("글자 투명도", AppPrefs.KEY_TEXT_ALPHA, 0, 100, 0, "%");
+        slider("배경 투명도", AppPrefs.KEY_FILL_ALPHA, 0, 100, 100, "%");
+        slider("테두리 투명도", AppPrefs.KEY_BORDER_ALPHA, 0, 100, 100, "%");
         toggle("Todo가 없어도 배경/테두리 표시", AppPrefs.KEY_SHOW_EMPTY_PANEL, false);
         slider("좌우 여백", AppPrefs.KEY_HORIZONTAL_PADDING, 0, 30, 8, "dp");
         slider("항목 세로 여백", AppPrefs.KEY_ROW_PADDING, 0, 16, 5, "dp");
         slider("최대 표시 항목", AppPrefs.KEY_MAX_ROWS, 1, 8, 8, "개");
         toggle("밝은 글자 (끄면 검은 글자)", AppPrefs.KEY_LIGHT_TEXT, true);
 
+        TextView transparencyNote = text("투명도: 0% = 완전히 보임 · 100% = 완전히 숨김", 12, Color.argb(145, 255, 255, 255));
+        transparencyNote.setPadding(0, dp(8), 0, dp(10));
+        content.addView(transparencyNote);
+
         section("조작 요소");
-        slider("체크 원 투명도", AppPrefs.KEY_CHECK_ALPHA, 10, 100, 90, "%");
-        slider("≡ 핸들 투명도", AppPrefs.KEY_HANDLE_ALPHA, 5, 100, 55, "%");
+        slider("체크 원 투명도", AppPrefs.KEY_CHECK_ALPHA, 0, 100, 10, "%");
+        slider("≡ 핸들 투명도", AppPrefs.KEY_HANDLE_ALPHA, 0, 100, 45, "%");
         toggle("+ 버튼 표시", AppPrefs.KEY_SHOW_PLUS, true);
         toggle("할 일이 없을 때 + 숨기기", AppPrefs.KEY_HIDE_PLUS_WHEN_EMPTY, true);
-        slider("+ 버튼 크기", AppPrefs.KEY_PLUS_SIZE, 10, 28, 16, "sp");
-        slider("+ 버튼 투명도", AppPrefs.KEY_PLUS_ALPHA, 5, 100, 25, "%");
-        slider("체크 후 제거 지연", AppPrefs.KEY_CHECK_DELAY, 0, 600, 240, "ms");
-        toggle("체크할 때 진동", AppPrefs.KEY_HAPTIC, true);
+        slider("+ 버튼 크기", AppPrefs.KEY_PLUS_SIZE, 10, 28, 17, "sp");
+        slider("+ 버튼 투명도", AppPrefs.KEY_PLUS_ALPHA, 0, 100, 45, "%");
+        slider("완료 표시 후 제거 지연", AppPrefs.KEY_CHECK_DELAY, 0, 600, 300, "ms");
+        toggle("완료할 때 진동", AppPrefs.KEY_HAPTIC, true);
 
-        TextView behavior = text("위젯 빈 영역/+ → 작은 입력창 · Todo 글자 → 수정 · ○ → 체크 후 삭제 · ≡ → 순서 변경 창. 위젯 내부 직접 드래그는 Android RemoteViews 제한 때문에 순서 변경 창에서 처리합니다.", 12, Color.argb(155, 255, 255, 255));
+        TextView behavior = text("빈 영역/+ → 빠른 입력 · Todo 글자 → 수정 · ○ → ●로 바뀐 뒤 삭제 · ≡ → 순서 변경", 12, Color.argb(155, 255, 255, 255));
         behavior.setLineSpacing(0, 1.15f);
         behavior.setPadding(0, dp(12), 0, dp(18));
         content.addView(behavior);
@@ -179,6 +159,7 @@ public class SettingsActivity extends Activity {
         reset.setAllCaps(false);
         reset.setOnClickListener(v -> {
             AppPrefs.reset(this);
+            prefs = AppPrefs.get(this);
             LockTodoWidget.updateAll(this);
             render();
         });
@@ -187,10 +168,10 @@ public class SettingsActivity extends Activity {
         setContentView(scroll);
     }
 
-    private void requestWidget(Class<?> providerClass) {
+    private void requestWidget() {
         AppWidgetManager manager = AppWidgetManager.getInstance(this);
         if (manager.isRequestPinAppWidgetSupported()) {
-            manager.requestPinAppWidget(new ComponentName(this, providerClass), null, null);
+            manager.requestPinAppWidget(new ComponentName(this, LockTodoWidget.class), null, null);
         }
     }
 

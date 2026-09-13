@@ -27,15 +27,57 @@ final class AppPrefs {
     static final String KEY_CHECK_DELAY = "check_delay_ms";
     static final String KEY_CHECKING_INDEX = "checking_index";
 
+    private static final String KEY_V07_MIGRATED = "v07_transparency_migrated";
+
     private AppPrefs() {}
 
     static SharedPreferences get(Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        migrateToV07(prefs);
+        return prefs;
+    }
+
+    private static void migrateToV07(SharedPreferences prefs) {
+        if (prefs.getBoolean(KEY_V07_MIGRATED, false)) return;
+
+        SharedPreferences.Editor editor = prefs.edit();
+        invertIfPresent(prefs, editor, KEY_TEXT_ALPHA);
+        invertIfPresent(prefs, editor, KEY_FILL_ALPHA);
+        invertIfPresent(prefs, editor, KEY_BORDER_ALPHA);
+        invertIfPresent(prefs, editor, KEY_CHECK_ALPHA);
+        invertIfPresent(prefs, editor, KEY_HANDLE_ALPHA);
+
+        if (prefs.contains(KEY_PLUS_ALPHA)) {
+            int oldValue = clampPercent(prefs.getInt(KEY_PLUS_ALPHA, 25));
+            // v0.6 default was intentionally faint. v0.7 aligns + with the handle by default.
+            editor.putInt(KEY_PLUS_ALPHA, oldValue == 25 ? 45 : 100 - oldValue);
+        }
+        if (prefs.contains(KEY_PLUS_SIZE) && prefs.getInt(KEY_PLUS_SIZE, 16) == 16) {
+            editor.putInt(KEY_PLUS_SIZE, 17);
+        }
+        if (prefs.contains(KEY_CHECK_DELAY) && prefs.getInt(KEY_CHECK_DELAY, 240) == 240) {
+            editor.putInt(KEY_CHECK_DELAY, 300);
+        }
+
+        editor.putBoolean(KEY_V07_MIGRATED, true).apply();
+    }
+
+    private static void invertIfPresent(SharedPreferences prefs, SharedPreferences.Editor editor, String key) {
+        if (!prefs.contains(key)) return;
+        editor.putInt(key, 100 - clampPercent(prefs.getInt(key, 0)));
+    }
+
+    private static int clampPercent(int value) {
+        return Math.max(0, Math.min(100, value));
     }
 
     static void reset(Context context) {
-        SharedPreferences prefs = get(context);
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String todos = prefs.getString("todos_json", "[]");
-        prefs.edit().clear().putString("todos_json", todos).apply();
+        prefs.edit()
+                .clear()
+                .putString("todos_json", todos)
+                .putBoolean(KEY_V07_MIGRATED, true)
+                .apply();
     }
 }

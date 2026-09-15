@@ -130,7 +130,6 @@ public class LockTodoWidget extends AppWidgetProvider {
         serviceIntent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId);
         serviceIntent.setData(Uri.parse(serviceIntent.toUri(Intent.URI_INTENT_SCHEME)));
         views.setRemoteAdapter(R.id.todo_list, serviceIntent);
-        views.setEmptyView(R.id.todo_list, R.id.blank_click_area);
 
         Intent rowTemplateIntent = new Intent(context, LockTodoWidget.class);
         PendingIntent rowTemplate = PendingIntent.getBroadcast(

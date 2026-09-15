@@ -6,8 +6,10 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
@@ -23,16 +25,18 @@ public class QuickTodoActivity extends Activity {
 
     private EditText input;
     private int editIndex = -1;
+    private long lastOutsideTap = 0L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setShowWhenLocked(true);
-        setFinishOnTouchOutside(true);
+        setFinishOnTouchOutside(false);
 
         Window window = getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.addFlags(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
         window.setSoftInputMode(
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE |
                 WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
@@ -101,10 +105,10 @@ public class QuickTodoActivity extends Activity {
             }
         }
 
-        done.setOnClickListener(v -> saveAndClose());
+        done.setOnClickListener(v -> save());
         input.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                saveAndClose();
+                save();
                 return true;
             }
             return false;
@@ -117,13 +121,40 @@ public class QuickTodoActivity extends Activity {
         }, 80);
     }
 
-    private void saveAndClose() {
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getActionMasked() == MotionEvent.ACTION_OUTSIDE) {
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastOutsideTap <= 420L) {
+                finish();
+            } else {
+                lastOutsideTap = now;
+            }
+            return true;
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    private void save() {
         String text = input.getText().toString().trim();
         TodoStore store = new TodoStore(this);
-        if (editIndex >= 0) store.replaceAt(editIndex, text);
-        else if (!text.isEmpty()) store.add(text);
+
+        if (editIndex >= 0) {
+            store.replaceAt(editIndex, text);
+            LockTodoWidget.updateAll(this);
+            finish();
+            return;
+        }
+
+        if (text.isEmpty()) return;
+        store.add(text);
         LockTodoWidget.updateAll(this);
-        finish();
+        input.setText("");
+        input.requestFocus();
+        input.post(() -> {
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+        });
     }
 
     private int dp(int value) {

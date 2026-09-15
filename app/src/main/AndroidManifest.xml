@@ -35,6 +35,11 @@
             android:showWhenLocked="true"
             android:theme="@style/Theme.LockTodo.Dialog" />
 
+        <service
+            android:name=".TodoRemoteViewsService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
         <receiver
             android:name=".LockTodoWidget"
             android:exported="true"

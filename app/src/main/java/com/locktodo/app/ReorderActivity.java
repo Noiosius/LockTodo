@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -21,16 +22,17 @@ import java.util.List;
 public class ReorderActivity extends Activity {
     private LinearLayout listContainer;
     private boolean light;
+    private long lastOutsideTap = 0L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setShowWhenLocked(true);
-        setFinishOnTouchOutside(true);
+        setFinishOnTouchOutside(false);
 
         Window window = getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
-        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
         WindowManager.LayoutParams attrs = window.getAttributes();
         attrs.dimAmount = 0.18f;
         attrs.gravity = Gravity.CENTER;
@@ -54,23 +56,12 @@ public class ReorderActivity extends Activity {
         bg.setStroke(dp(1), light ? Color.argb(70, 255, 255, 255) : Color.argb(55, 0, 0, 0));
         card.setBackground(bg);
 
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = new TextView(this);
         title.setText("순서 변경");
         title.setTextSize(15);
         title.setTextColor(fg);
-        header.addView(title, new LinearLayout.LayoutParams(0, dp(38), 1f));
-
-        TextView done = new TextView(this);
-        done.setText("완료");
-        done.setTextSize(14);
-        done.setGravity(Gravity.CENTER);
-        done.setTextColor(fg);
-        done.setAlpha(0.72f);
-        done.setOnClickListener(v -> finish());
-        header.addView(done, new LinearLayout.LayoutParams(dp(56), dp(38)));
-        card.addView(header);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        card.addView(title, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)));
 
         ScrollView scroll = new ScrollView(this);
         listContainer = new LinearLayout(this);
@@ -87,6 +78,20 @@ public class ReorderActivity extends Activity {
         window.setAttributes(finalAttrs);
 
         render();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getActionMasked() == MotionEvent.ACTION_OUTSIDE) {
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastOutsideTap <= 420L) {
+                finish();
+            } else {
+                lastOutsideTap = now;
+            }
+            return true;
+        }
+        return super.dispatchTouchEvent(ev);
     }
 
     private void render() {

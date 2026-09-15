@@ -63,6 +63,15 @@ final class TodoStore {
         save(items);
     }
 
+    synchronized boolean removeAtIfMatches(int index, String expectedText) {
+        List<String> items = load();
+        if (index < 0 || index >= items.size()) return false;
+        if (expectedText == null || !expectedText.equals(items.get(index))) return false;
+        items.remove(index);
+        save(items);
+        return true;
+    }
+
     synchronized void move(int from, int to) {
         List<String> items = load();
         if (from < 0 || from >= items.size() || to < 0 || to >= items.size() || from == to) return;

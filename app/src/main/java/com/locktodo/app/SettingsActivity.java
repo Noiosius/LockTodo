@@ -42,7 +42,7 @@ public class SettingsActivity extends Activity {
         TextView title = text("Lock Todo", 24, Color.WHITE);
         content.addView(title);
 
-        TextView subtitle = text("v0.7 · 잠금화면 Todo 위젯", 13, Color.argb(160, 255, 255, 255));
+        TextView subtitle = text("v0.8 · 잠금화면 Todo 위젯", 13, Color.argb(160, 255, 255, 255));
         subtitle.setPadding(0, dp(4), 0, dp(18));
         content.addView(subtitle);
 
@@ -120,7 +120,7 @@ public class SettingsActivity extends Activity {
         addWidget.setOnClickListener(v -> requestWidget());
         content.addView(addWidget, matchWrap());
 
-        TextView guide = text("홈 화면 또는 LockStar에서 LockTodo 위젯을 직접 추가해도 됩니다.", 13, Color.argb(185, 255, 255, 255));
+        TextView guide = text("위젯 높이에 맞춰 항목이 보이고, 넘치는 항목은 위젯 안에서 스크롤할 수 있습니다.", 13, Color.argb(185, 255, 255, 255));
         guide.setPadding(0, dp(12), 0, dp(14));
         content.addView(guide);
 
@@ -132,7 +132,6 @@ public class SettingsActivity extends Activity {
         toggle("Todo가 없어도 배경/테두리 표시", AppPrefs.KEY_SHOW_EMPTY_PANEL, false);
         slider("좌우 여백", AppPrefs.KEY_HORIZONTAL_PADDING, 0, 30, 8, "dp");
         slider("항목 세로 여백", AppPrefs.KEY_ROW_PADDING, 0, 16, 5, "dp");
-        slider("최대 표시 항목", AppPrefs.KEY_MAX_ROWS, 1, 8, 8, "개");
         toggle("밝은 글자 (끄면 검은 글자)", AppPrefs.KEY_LIGHT_TEXT, true);
 
         TextView transparencyNote = text("투명도: 0% = 완전히 보임 · 100% = 완전히 숨김", 12, Color.argb(145, 255, 255, 255));
@@ -146,10 +145,10 @@ public class SettingsActivity extends Activity {
         toggle("할 일이 없을 때 + 숨기기", AppPrefs.KEY_HIDE_PLUS_WHEN_EMPTY, true);
         slider("+ 버튼 크기", AppPrefs.KEY_PLUS_SIZE, 10, 28, 17, "sp");
         slider("+ 버튼 투명도", AppPrefs.KEY_PLUS_ALPHA, 0, 100, 45, "%");
-        slider("완료 표시 후 제거 지연", AppPrefs.KEY_CHECK_DELAY, 0, 600, 300, "ms");
+        slider("완료 표시 후 제거 지연", AppPrefs.KEY_CHECK_DELAY, 0, 3000, 300, "ms");
         toggle("완료할 때 진동", AppPrefs.KEY_HAPTIC, true);
 
-        TextView behavior = text("빈 영역/+ → 빠른 입력 · Todo 글자 → 수정 · ○ → ●로 바뀐 뒤 삭제 · ≡ → 순서 변경", 12, Color.argb(155, 255, 255, 255));
+        TextView behavior = text("빈 영역/+ → 빠른 입력 · Todo → 수정 · ○ → ● 뒤 삭제 · ≡ → 순서 변경 · 입력/순서 창 바깥은 두 번 탭해 닫기", 12, Color.argb(155, 255, 255, 255));
         behavior.setLineSpacing(0, 1.15f);
         behavior.setPadding(0, dp(12), 0, dp(18));
         content.addView(behavior);

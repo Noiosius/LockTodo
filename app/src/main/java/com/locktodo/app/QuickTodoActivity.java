@@ -1,7 +1,6 @@
 package com.locktodo.app;
 
 import android.app.Activity;
-import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -34,31 +33,24 @@ public class QuickTodoActivity extends Activity {
         setShowWhenLocked(true);
         setFinishOnTouchOutside(false);
 
-        SharedPreferences prefs = AppPrefs.get(this);
-        int popupDim = Math.max(0, Math.min(100, prefs.getInt(AppPrefs.KEY_POPUP_DIM, 18)));
-
         Window window = getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
         window.getDecorView().setBackgroundColor(Color.TRANSPARENT);
-        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-
-        KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-        if (keyguard != null && keyguard.isKeyguardLocked()) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
-        }
-
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
+        window.addFlags(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
         window.setSoftInputMode(
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE |
                 WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         );
 
+        SharedPreferences prefs = AppPrefs.get(this);
         boolean light = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);
         int fg = light ? Color.WHITE : Color.BLACK;
         int panel = light ? Color.argb(224, 25, 25, 27) : Color.argb(235, 247, 247, 247);
 
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
-        outer.setPadding(dp(8), dp(4), dp(8), dp(4));
+        outer.setPadding(dp(6), dp(4), dp(6), dp(4));
         outer.setBackgroundColor(Color.TRANSPARENT);
 
         LinearLayout row = new LinearLayout(this);
@@ -97,10 +89,10 @@ public class QuickTodoActivity extends Activity {
 
         DisplayMetrics dm = getResources().getDisplayMetrics();
         WindowManager.LayoutParams attrs = window.getAttributes();
-        attrs.width = Math.min(dm.widthPixels - dp(24), dp(520));
+        attrs.width = Math.min(dm.widthPixels - dp(48), dp(310));
         attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
         attrs.gravity = Gravity.CENTER;
-        attrs.dimAmount = popupDim / 100f;
+        attrs.dimAmount = 0f;
         window.setAttributes(attrs);
 
         editIndex = getIntent().getIntExtra(EXTRA_EDIT_INDEX, -1);

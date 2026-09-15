@@ -68,10 +68,13 @@ public class TodoRemoteViewsService extends RemoteViewsService {
             views.setTextViewTextSize(R.id.todo_handle, TypedValue.COMPLEX_UNIT_SP, Math.max(15, textSize + 1));
             views.setViewPadding(R.id.todo_row_root, 0, dp(rowPadding), 0, dp(rowPadding));
 
+            Intent add = new Intent();
+            add.setAction(LockTodoWidget.ACTION_ADD);
+            views.setOnClickFillInIntent(R.id.todo_row_root, add);
+
             Intent edit = new Intent();
             edit.setAction(LockTodoWidget.ACTION_EDIT);
             edit.putExtra(LockTodoWidget.EXTRA_INDEX, position);
-            views.setOnClickFillInIntent(R.id.todo_row_root, edit);
             views.setOnClickFillInIntent(R.id.todo_text, edit);
 
             Intent complete = new Intent();

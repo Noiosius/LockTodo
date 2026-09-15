@@ -26,7 +26,6 @@ final class AppPrefs {
     static final String KEY_PLUS_ALPHA = "plus_alpha";
     static final String KEY_CHECK_DELAY = "check_delay_ms";
     static final String KEY_CHECKING_INDEX = "checking_index";
-    static final String KEY_POPUP_DIM = "popup_dim_percent";
 
     private static final String KEY_V07_MIGRATED = "v07_transparency_migrated";
 
@@ -50,7 +49,6 @@ final class AppPrefs {
 
         if (prefs.contains(KEY_PLUS_ALPHA)) {
             int oldValue = clampPercent(prefs.getInt(KEY_PLUS_ALPHA, 25));
-            // v0.6 default was intentionally faint. v0.7 aligns + with the handle by default.
             editor.putInt(KEY_PLUS_ALPHA, oldValue == 25 ? 45 : 100 - oldValue);
         }
         if (prefs.contains(KEY_PLUS_SIZE) && prefs.getInt(KEY_PLUS_SIZE, 16) == 16) {

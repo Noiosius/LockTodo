@@ -27,15 +27,16 @@
         android:paddingLeft="8dp"
         android:paddingRight="8dp">
 
-        <FrameLayout
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:orientation="vertical">
 
             <ListView
                 android:id="@+id/todo_list"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:cacheColorHint="@android:color/transparent"
                 android:divider="@android:color/transparent"
                 android:dividerHeight="0dp"
@@ -46,9 +47,10 @@
             <TextView
                 android:id="@+id/blank_click_area"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
                 android:background="@android:color/transparent" />
-        </FrameLayout>
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/add_row"

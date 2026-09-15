@@ -1,7 +1,9 @@
 package com.locktodo.app;
 
 import android.app.Activity;
+import android.app.KeyguardManager;
 import android.content.ClipData;
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -30,15 +32,24 @@ public class ReorderActivity extends Activity {
         setShowWhenLocked(true);
         setFinishOnTouchOutside(false);
 
+        SharedPreferences prefs = AppPrefs.get(this);
+        int popupDim = Math.max(0, Math.min(100, prefs.getInt(AppPrefs.KEY_POPUP_DIM, 18)));
+
         Window window = getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
+        window.getDecorView().setBackgroundColor(Color.TRANSPARENT);
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+
+        KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        if (keyguard != null && keyguard.isKeyguardLocked()) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
+        }
+
         WindowManager.LayoutParams attrs = window.getAttributes();
-        attrs.dimAmount = 0.18f;
+        attrs.dimAmount = popupDim / 100f;
         attrs.gravity = Gravity.CENTER;
         window.setAttributes(attrs);
 
-        SharedPreferences prefs = AppPrefs.get(this);
         light = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);
         int fg = light ? Color.WHITE : Color.BLACK;
         int panel = light ? Color.argb(222, 25, 25, 25) : Color.argb(235, 248, 248, 248);
@@ -46,6 +57,7 @@ public class ReorderActivity extends Activity {
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
         outer.setPadding(dp(22), dp(10), dp(22), dp(10));
+        outer.setBackgroundColor(Color.TRANSPARENT);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -75,6 +87,7 @@ public class ReorderActivity extends Activity {
         WindowManager.LayoutParams finalAttrs = window.getAttributes();
         finalAttrs.width = WindowManager.LayoutParams.MATCH_PARENT;
         finalAttrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        finalAttrs.dimAmount = popupDim / 100f;
         window.setAttributes(finalAttrs);
 
         render();

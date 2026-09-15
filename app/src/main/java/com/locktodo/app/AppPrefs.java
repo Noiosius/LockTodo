@@ -26,6 +26,7 @@ final class AppPrefs {
     static final String KEY_PLUS_ALPHA = "plus_alpha";
     static final String KEY_CHECK_DELAY = "check_delay_ms";
     static final String KEY_CHECKING_INDEX = "checking_index";
+    static final String KEY_POPUP_DIM = "popup_dim_percent";
 
     private static final String KEY_V07_MIGRATED = "v07_transparency_migrated";
 

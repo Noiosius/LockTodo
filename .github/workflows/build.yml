@@ -37,7 +37,7 @@ jobs:
       - name: Upload LockTodo APK
         uses: actions/upload-artifact@v4
         with:
-          name: LockTodo-v0.8.2-apk
+          name: LockTodo-v0.8.3-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 

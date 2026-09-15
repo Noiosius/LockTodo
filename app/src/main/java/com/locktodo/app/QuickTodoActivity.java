@@ -1,6 +1,7 @@
 package com.locktodo.app;
 
 import android.app.Activity;
+import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -33,16 +34,24 @@ public class QuickTodoActivity extends Activity {
         setShowWhenLocked(true);
         setFinishOnTouchOutside(false);
 
+        SharedPreferences prefs = AppPrefs.get(this);
+        int popupDim = Math.max(0, Math.min(100, prefs.getInt(AppPrefs.KEY_POPUP_DIM, 18)));
+
         Window window = getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
-        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        window.addFlags(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+        window.getDecorView().setBackgroundColor(Color.TRANSPARENT);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+
+        KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        if (keyguard != null && keyguard.isKeyguardLocked()) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
+        }
+
         window.setSoftInputMode(
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE |
                 WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         );
 
-        SharedPreferences prefs = AppPrefs.get(this);
         boolean light = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);
         int fg = light ? Color.WHITE : Color.BLACK;
         int panel = light ? Color.argb(224, 25, 25, 27) : Color.argb(235, 247, 247, 247);
@@ -91,7 +100,7 @@ public class QuickTodoActivity extends Activity {
         attrs.width = Math.min(dm.widthPixels - dp(24), dp(520));
         attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
         attrs.gravity = Gravity.CENTER;
-        attrs.dimAmount = 0f;
+        attrs.dimAmount = popupDim / 100f;
         window.setAttributes(attrs);
 
         editIndex = getIntent().getIntExtra(EXTRA_EDIT_INDEX, -1);

@@ -42,7 +42,7 @@ public class SettingsActivity extends Activity {
         TextView title = text("Lock Todo", 24, Color.WHITE);
         content.addView(title);
 
-        TextView subtitle = text("v0.8 · 잠금화면 Todo 위젯", 13, Color.argb(160, 255, 255, 255));
+        TextView subtitle = text("v0.8.3 · 잠금화면 Todo 위젯", 13, Color.argb(160, 255, 255, 255));
         subtitle.setPadding(0, dp(4), 0, dp(18));
         content.addView(subtitle);
 
@@ -137,6 +137,12 @@ public class SettingsActivity extends Activity {
         TextView transparencyNote = text("투명도: 0% = 완전히 보임 · 100% = 완전히 숨김", 12, Color.argb(145, 255, 255, 255));
         transparencyNote.setPadding(0, dp(8), 0, dp(10));
         content.addView(transparencyNote);
+
+        section("팝업 창");
+        slider("뒤 배경 어둡기", AppPrefs.KEY_POPUP_DIM, 0, 100, 18, "%");
+        TextView popupNote = text("0% = 잠금화면 배경을 그대로 보임 · 100% = 뒤 배경을 검게 가림", 12, Color.argb(145, 255, 255, 255));
+        popupNote.setPadding(0, dp(8), 0, dp(10));
+        content.addView(popupNote);
 
         section("조작 요소");
         slider("체크 원 투명도", AppPrefs.KEY_CHECK_ALPHA, 0, 100, 10, "%");

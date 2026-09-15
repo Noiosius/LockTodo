@@ -1,14 +1,13 @@
 package com.locktodo.app;
 
 import android.app.Activity;
-import android.app.KeyguardManager;
 import android.content.ClipData;
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.util.DisplayMetrics;
 import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -32,36 +31,25 @@ public class ReorderActivity extends Activity {
         setShowWhenLocked(true);
         setFinishOnTouchOutside(false);
 
-        SharedPreferences prefs = AppPrefs.get(this);
-        int popupDim = Math.max(0, Math.min(100, prefs.getInt(AppPrefs.KEY_POPUP_DIM, 18)));
-
         Window window = getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
         window.getDecorView().setBackgroundColor(Color.TRANSPARENT);
-        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
+        window.addFlags(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
 
-        KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-        if (keyguard != null && keyguard.isKeyguardLocked()) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
-        }
-
-        WindowManager.LayoutParams attrs = window.getAttributes();
-        attrs.dimAmount = popupDim / 100f;
-        attrs.gravity = Gravity.CENTER;
-        window.setAttributes(attrs);
-
+        SharedPreferences prefs = AppPrefs.get(this);
         light = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);
         int fg = light ? Color.WHITE : Color.BLACK;
         int panel = light ? Color.argb(222, 25, 25, 25) : Color.argb(235, 248, 248, 248);
 
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
-        outer.setPadding(dp(22), dp(10), dp(22), dp(10));
+        outer.setPadding(dp(6), dp(6), dp(6), dp(6));
         outer.setBackgroundColor(Color.TRANSPARENT);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(12), dp(14), dp(10));
+        card.setPadding(dp(14), dp(10), dp(14), dp(8));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(panel);
         bg.setCornerRadius(dp(20));
@@ -73,22 +61,24 @@ public class ReorderActivity extends Activity {
         title.setTextSize(15);
         title.setTextColor(fg);
         title.setGravity(Gravity.CENTER_VERTICAL);
-        card.addView(title, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)));
+        card.addView(title, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)));
 
         ScrollView scroll = new ScrollView(this);
         listContainer = new LinearLayout(this);
         listContainer.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(listContainer, new ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
-        card.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(360)));
+        card.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(280)));
 
         outer.addView(card, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         setContentView(outer);
 
-        WindowManager.LayoutParams finalAttrs = window.getAttributes();
-        finalAttrs.width = WindowManager.LayoutParams.MATCH_PARENT;
-        finalAttrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        finalAttrs.dimAmount = popupDim / 100f;
-        window.setAttributes(finalAttrs);
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        WindowManager.LayoutParams attrs = window.getAttributes();
+        attrs.width = Math.min(dm.widthPixels - dp(48), dp(310));
+        attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        attrs.gravity = Gravity.CENTER;
+        attrs.dimAmount = 0f;
+        window.setAttributes(attrs);
 
         render();
     }
@@ -123,21 +113,21 @@ public class ReorderActivity extends Activity {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(4), dp(8), dp(2), dp(8));
+            row.setPadding(dp(4), dp(5), dp(2), dp(5));
 
             TextView text = new TextView(this);
             text.setText(items.get(i));
-            text.setTextSize(17);
+            text.setTextSize(16);
             text.setTextColor(fg);
             text.setSingleLine(true);
-            row.addView(text, new LinearLayout.LayoutParams(0, dp(46), 1f));
+            row.addView(text, new LinearLayout.LayoutParams(0, dp(42), 1f));
 
             TextView handle = new TextView(this);
             handle.setText("≡");
-            handle.setTextSize(22);
+            handle.setTextSize(21);
             handle.setTextColor(muted);
             handle.setGravity(Gravity.CENTER);
-            row.addView(handle, new LinearLayout.LayoutParams(dp(54), dp(46)));
+            row.addView(handle, new LinearLayout.LayoutParams(dp(46), dp(42)));
 
             handle.setOnTouchListener((v, event) -> {
                 if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {

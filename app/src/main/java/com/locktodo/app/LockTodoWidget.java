@@ -21,6 +21,7 @@ public class LockTodoWidget extends AppWidgetProvider {
     static final String ACTION_COMPLETE = "com.locktodo.app.ACTION_COMPLETE";
     static final String ACTION_EDIT = "com.locktodo.app.ACTION_EDIT";
     static final String ACTION_REORDER = "com.locktodo.app.ACTION_REORDER";
+    static final String ACTION_ADD = "com.locktodo.app.ACTION_ADD";
     static final String EXTRA_INDEX = "index";
 
     @Override
@@ -40,13 +41,15 @@ public class LockTodoWidget extends AppWidgetProvider {
         super.onReceive(context, intent);
         String action = intent.getAction();
 
+        if (ACTION_ADD.equals(action)) {
+            openQuickTodo(context, -1);
+            return;
+        }
+
         if (ACTION_EDIT.equals(action)) {
             int index = intent.getIntExtra(EXTRA_INDEX, -1);
             if (index < 0) return;
-            Intent edit = new Intent(context, QuickTodoActivity.class);
-            edit.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            edit.putExtra(QuickTodoActivity.EXTRA_EDIT_INDEX, index);
-            context.startActivity(edit);
+            openQuickTodo(context, index);
             return;
         }
 
@@ -84,6 +87,13 @@ public class LockTodoWidget extends AppWidgetProvider {
                 pending.finish();
             }
         }).start();
+    }
+
+    private static void openQuickTodo(Context context, int editIndex) {
+        Intent quick = new Intent(context, QuickTodoActivity.class);
+        quick.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        if (editIndex >= 0) quick.putExtra(QuickTodoActivity.EXTRA_EDIT_INDEX, editIndex);
+        context.startActivity(quick);
     }
 
     static void updateAll(Context context) {
@@ -131,12 +141,12 @@ public class LockTodoWidget extends AppWidgetProvider {
         );
         views.setPendingIntentTemplate(R.id.todo_list, rowTemplate);
 
-        Intent addIntent = new Intent(context, QuickTodoActivity.class);
-        addIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent addPending = PendingIntent.getActivity(
+        Intent addBroadcast = new Intent(context, LockTodoWidget.class);
+        addBroadcast.setAction(ACTION_ADD);
+        PendingIntent addPending = PendingIntent.getBroadcast(
                 context,
                 200000 + appWidgetId,
-                addIntent,
+                addBroadcast,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
         views.setOnClickPendingIntent(R.id.widget_root, addPending);

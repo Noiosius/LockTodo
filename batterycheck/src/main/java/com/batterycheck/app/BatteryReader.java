@@ -14,11 +14,20 @@ import java.util.List;
 
 final class BatteryReader {
     private static final double S21_FALLBACK_CAPACITY_MAH = 4000.0;
-    private static final int CURRENT_SAMPLE_WINDOW = 5;
+    private static final int CURRENT_SAMPLE_WINDOW = 16;
+    private static final int MIN_ESTIMATE_SAMPLES = 12;
+    private static final int STABLE_WINDOWS_REQUIRED = 3;
+    private static final int MAX_WARMUP_SAMPLES = 24;
+    private static final double STABILITY_CV_LIMIT = 0.25;
+
     private static final ArrayDeque<Double> currentSamplesMa = new ArrayDeque<>();
+    private static int validSampleCount = 0;
+    private static int stableWindowCount = 0;
+    private static boolean estimatesReady = false;
 
     static final class Snapshot {
         final boolean charging;
+        final boolean estimatesReady;
         final int level;
         final double watts;
         final double avgPercentPerHour;
@@ -26,9 +35,10 @@ final class BatteryReader {
         final long remainingMinutes;
         final String fullTime;
 
-        Snapshot(boolean charging, int level, double watts, double avgPercentPerHour,
+        Snapshot(boolean charging, boolean estimatesReady, int level, double watts, double avgPercentPerHour,
                  double temperatureC, long remainingMinutes, String fullTime) {
             this.charging = charging;
+            this.estimatesReady = estimatesReady;
             this.level = level;
             this.watts = watts;
             this.avgPercentPerHour = avgPercentPerHour;
@@ -43,7 +53,7 @@ final class BatteryReader {
     static Snapshot read(Context context) {
         Intent battery = context.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         if (battery == null) {
-            return new Snapshot(false, -1, Double.NaN, Double.NaN, Double.NaN, -1, "—");
+            return new Snapshot(false, false, -1, Double.NaN, Double.NaN, Double.NaN, -1, "—");
         }
 
         int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN);
@@ -93,7 +103,7 @@ final class BatteryReader {
             }
 
             double fullCapacityMah = estimateFullCapacityMah(manager, level);
-            if (!Double.isNaN(smoothedCurrentMa) && smoothedCurrentMa > 0.0
+            if (estimatesReady && !Double.isNaN(smoothedCurrentMa) && smoothedCurrentMa > 0.0
                     && fullCapacityMah > 0.0) {
                 // Instant-equivalent charging speed: if the present net charging current stayed
                 // the same for one hour, approximately this many battery percentage points would
@@ -142,6 +152,7 @@ final class BatteryReader {
 
         return new Snapshot(
                 charging,
+                estimatesReady,
                 level,
                 watts,
                 chargeSpeedPercentPerHour,
@@ -154,6 +165,7 @@ final class BatteryReader {
     private static synchronized double addAndGetSmoothedCurrent(double sampleMa) {
         if (!Double.isNaN(sampleMa) && sampleMa > 0.0) {
             currentSamplesMa.addLast(sampleMa);
+            validSampleCount++;
             while (currentSamplesMa.size() > CURRENT_SAMPLE_WINDOW) {
                 currentSamplesMa.removeFirst();
             }
@@ -164,17 +176,53 @@ final class BatteryReader {
         List<Double> values = new ArrayList<>(currentSamplesMa);
         Collections.sort(values);
 
-        // Once five readings are available, discard one high and one low outlier and average
-        // the middle three. Before that, simply average the readings collected so far.
-        int start = values.size() >= 5 ? 1 : 0;
-        int end = values.size() >= 5 ? values.size() - 1 : values.size();
+        int trim;
+        if (values.size() >= MIN_ESTIMATE_SAMPLES) {
+            trim = 2;
+        } else if (values.size() >= 5) {
+            trim = 1;
+        } else {
+            trim = 0;
+        }
+
+        int start = trim;
+        int end = values.size() - trim;
         double total = 0.0;
         for (int i = start; i < end; i++) total += values.get(i);
-        return total / (end - start);
+        double mean = total / (end - start);
+
+        if (!estimatesReady && values.size() >= MIN_ESTIMATE_SAMPLES) {
+            double variance = 0.0;
+            for (int i = start; i < end; i++) {
+                double delta = values.get(i) - mean;
+                variance += delta * delta;
+            }
+            variance /= Math.max(1, end - start);
+            double coefficientOfVariation = mean > 0.0 ? Math.sqrt(variance) / mean : Double.POSITIVE_INFINITY;
+
+            if (coefficientOfVariation <= STABILITY_CV_LIMIT) {
+                stableWindowCount++;
+            } else {
+                stableWindowCount = 0;
+            }
+
+            if (stableWindowCount >= STABLE_WINDOWS_REQUIRED || validSampleCount >= MAX_WARMUP_SAMPLES) {
+                estimatesReady = true;
+            }
+        }
+
+        return mean;
+    }
+
+    static synchronized void resetEstimates() {
+        clearCurrentSamples();
     }
 
     private static synchronized void clearCurrentSamples() {
         currentSamplesMa.clear();
+        validSampleCount = 0;
+        stableWindowCount = 0;
+        estimatesReady = false;
     }
 
     private static double normalizeCurrentMa(int raw) {

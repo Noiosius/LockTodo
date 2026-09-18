@@ -50,7 +50,7 @@ jobs:
       - name: Upload Battery Check APK
         uses: actions/upload-artifact@v4
         with:
-          name: Battery-Check-v1.1-apk
+          name: Battery-Check-v1.2-apk
           path: batterycheck/build/outputs/apk/debug/batterycheck-debug.apk
           if-no-files-found: error
 

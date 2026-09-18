@@ -72,7 +72,7 @@ public class SettingsActivity extends Activity {
         });
         content.addView(group, matchWrap());
 
-        TextView note = text("표시는 충전 전력 · 평균 속도 · 남은 시간 · 온도 순서입니다. 남은 시간 아래에는 예상 완충 시각이 함께 표시됩니다.", 12, Color.argb(145, 255, 255, 255));
+        TextView note = text("표시는 충전 전력 · 충전 속도 · 남은 시간 · 온도 순서입니다. 남은 시간 아래에는 예상 완충 시각이 함께 표시됩니다.", 12, Color.argb(145, 255, 255, 255));
         note.setLineSpacing(0, 1.15f);
         note.setPadding(0, dp(18), 0, dp(18));
         content.addView(note);

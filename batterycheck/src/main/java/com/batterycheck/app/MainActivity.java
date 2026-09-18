@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setShowWhenLocked(true);
+        BatteryReader.resetEstimates();
 
         Window window = getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
@@ -108,8 +109,11 @@ public class MainActivity extends Activity {
         powerMetric = addMetric(card, "충전 전력", textScale, false);
         addDivider(card);
         speedMetric = addMetric(card, "충전 속도", textScale, false);
+        speedMetric.value.setText("");
         addDivider(card);
         remainingMetric = addMetric(card, "남은 시간", textScale, true);
+        remainingMetric.value.setText("");
+        if (remainingMetric.subValue != null) remainingMetric.subValue.setText("");
         addDivider(card);
         tempMetric = addMetric(card, "온도", textScale, false);
 
@@ -201,16 +205,22 @@ public class MainActivity extends Activity {
                 ? "—"
                 : String.format(Locale.getDefault(), "%.1f W", s.watts));
 
-        speedMetric.value.setText(Double.isNaN(s.avgPercentPerHour)
-                ? "—"
-                : String.format(Locale.getDefault(), "+%.0f%%/h", s.avgPercentPerHour));
-
-        if (s.remainingMinutes > 0) {
-            remainingMetric.value.setText(s.remainingMinutes + "분");
-            if (remainingMetric.subValue != null) remainingMetric.subValue.setText(s.fullTime);
+        if (!s.estimatesReady) {
+            speedMetric.value.setText("");
+            remainingMetric.value.setText("");
+            if (remainingMetric.subValue != null) remainingMetric.subValue.setText("");
         } else {
-            remainingMetric.value.setText("—");
-            if (remainingMetric.subValue != null) remainingMetric.subValue.setText("—");
+            speedMetric.value.setText(Double.isNaN(s.avgPercentPerHour)
+                    ? "—"
+                    : String.format(Locale.getDefault(), "+%.0f%%/h", s.avgPercentPerHour));
+
+            if (s.remainingMinutes > 0) {
+                remainingMetric.value.setText(s.remainingMinutes + "분");
+                if (remainingMetric.subValue != null) remainingMetric.subValue.setText(s.fullTime);
+            } else {
+                remainingMetric.value.setText("—");
+                if (remainingMetric.subValue != null) remainingMetric.subValue.setText("—");
+            }
         }
 
         tempMetric.value.setText(Double.isNaN(s.temperatureC)

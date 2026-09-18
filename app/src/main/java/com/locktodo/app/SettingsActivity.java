@@ -42,7 +42,7 @@ public class SettingsActivity extends Activity {
         TextView title = text("Lock Todo", 24, Color.WHITE);
         content.addView(title);
 
-        TextView subtitle = text("v0.8.4 · 잠금화면 Todo 위젯", 13, Color.argb(160, 255, 255, 255));
+        TextView subtitle = text("v0.8.5 · 잠금화면 Todo 위젯", 13, Color.argb(160, 255, 255, 255));
         subtitle.setPadding(0, dp(4), 0, dp(18));
         content.addView(subtitle);
 
@@ -148,7 +148,7 @@ public class SettingsActivity extends Activity {
         slider("완료 표시 후 제거 지연", AppPrefs.KEY_CHECK_DELAY, 0, 3000, 300, "ms");
         toggle("완료할 때 진동", AppPrefs.KEY_HAPTIC, true);
 
-        TextView behavior = text("빈 영역/+ → 빠른 입력 · Todo → 수정 · ○ → ● 뒤 삭제 · ≡ → 순서 변경 · 입력/순서 창 바깥은 두 번 탭해 닫기", 12, Color.argb(155, 255, 255, 255));
+        TextView behavior = text("빈 영역/+ 더블탭 → 빠른 입력 · Todo 더블탭 → 수정 · ○ → ● 뒤 삭제 · ≡ → 순서 변경 · 입력/순서 창 바깥은 두 번 탭해 닫기", 12, Color.argb(155, 255, 255, 255));
         behavior.setLineSpacing(0, 1.15f);
         behavior.setPadding(0, dp(12), 0, dp(18));
         content.addView(behavior);

@@ -9,6 +9,10 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -29,6 +33,7 @@ public class MainActivity extends Activity {
     private Metric speedMetric;
     private Metric remainingMetric;
     private Metric tempMetric;
+    private int loadingPhase = 0;
 
     private final Runnable refreshTask = new Runnable() {
         @Override public void run() {
@@ -205,11 +210,22 @@ public class MainActivity extends Activity {
                 ? "—"
                 : String.format(Locale.getDefault(), "%.1f W", s.watts));
 
-        if (!s.estimatesReady) {
-            speedMetric.value.setText("");
-            remainingMetric.value.setText("");
+        if (s.charging && !s.estimatesReady) {
+            CharSequence loading = measuringDots();
+            speedMetric.value.setText(loading);
+            remainingMetric.value.setText(loading);
             if (remainingMetric.subValue != null) remainingMetric.subValue.setText("");
+            loadingPhase = (loadingPhase + 1) % 3;
+        } else if (!s.charging) {
+            speedMetric.value.setTextColor(Color.WHITE);
+            remainingMetric.value.setTextColor(Color.WHITE);
+            speedMetric.value.setText("—");
+            remainingMetric.value.setText("—");
+            if (remainingMetric.subValue != null) remainingMetric.subValue.setText("—");
         } else {
+            speedMetric.value.setTextColor(Color.WHITE);
+            remainingMetric.value.setTextColor(Color.WHITE);
+
             speedMetric.value.setText(Double.isNaN(s.avgPercentPerHour)
                     ? "—"
                     : String.format(Locale.getDefault(), "+%.0f%%/h", s.avgPercentPerHour));
@@ -226,6 +242,32 @@ public class MainActivity extends Activity {
         tempMetric.value.setText(Double.isNaN(s.temperatureC)
                 ? "—"
                 : String.format(Locale.getDefault(), "%.1f°C", s.temperatureC));
+    }
+
+    private CharSequence measuringDots() {
+        String dots = "●  ●  ●";
+        SpannableString span = new SpannableString(dots);
+        int[] positions = {0, 3, 6};
+
+        for (int i = 0; i < positions.length; i++) {
+            int color = i == loadingPhase
+                    ? Color.argb(190, 255, 255, 255)
+                    : Color.argb(70, 255, 255, 255);
+            span.setSpan(
+                    new ForegroundColorSpan(color),
+                    positions[i],
+                    positions[i] + 1,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+
+        span.setSpan(
+                new RelativeSizeSpan(0.62f),
+                0,
+                span.length(),
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        return span;
     }
 
     private int dp(int value) {

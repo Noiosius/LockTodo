@@ -64,17 +64,21 @@ public class LockTodoWidget extends AppWidgetProvider {
         }
 
         if (ACTION_REORDER.equals(action)) {
-            Intent reorder = new Intent(context, ReorderActivity.class);
-            reorder.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            context.startActivity(reorder);
+            if (isConfirmedDoubleTap(context, ACTION_REORDER, -1)) {
+                Intent reorder = new Intent(context, ReorderActivity.class);
+                reorder.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                context.startActivity(reorder);
+            }
             return;
         }
 
         if (!ACTION_COMPLETE.equals(action)) return;
 
         int index = intent.getIntExtra(EXTRA_INDEX, -1);
+        if (index < 0) return;
+        if (!isConfirmedDoubleTap(context, ACTION_COMPLETE, index)) return;
         List<String> snapshot = new TodoStore(context).load();
-        if (index < 0 || index >= snapshot.size()) return;
+        if (index >= snapshot.size()) return;
         String expectedText = snapshot.get(index);
 
         SharedPreferences prefs = AppPrefs.get(context);

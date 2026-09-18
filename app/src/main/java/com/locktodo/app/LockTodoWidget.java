@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.TypedValue;
@@ -23,6 +24,11 @@ public class LockTodoWidget extends AppWidgetProvider {
     static final String ACTION_REORDER = "com.locktodo.app.ACTION_REORDER";
     static final String ACTION_ADD = "com.locktodo.app.ACTION_ADD";
     static final String EXTRA_INDEX = "index";
+
+    private static final long DOUBLE_TAP_WINDOW_MS = 500L;
+    private static final String KEY_LAST_TAP_TIME = "gesture_last_tap_time";
+    private static final String KEY_LAST_TAP_ACTION = "gesture_last_tap_action";
+    private static final String KEY_LAST_TAP_INDEX = "gesture_last_tap_index";
 
     @Override
     public void onUpdate(Context context, AppWidgetManager manager, int[] appWidgetIds) {
@@ -42,14 +48,18 @@ public class LockTodoWidget extends AppWidgetProvider {
         String action = intent.getAction();
 
         if (ACTION_ADD.equals(action)) {
-            openQuickTodo(context, -1);
+            if (isConfirmedDoubleTap(context, ACTION_ADD, -1)) {
+                openQuickTodo(context, -1);
+            }
             return;
         }
 
         if (ACTION_EDIT.equals(action)) {
             int index = intent.getIntExtra(EXTRA_INDEX, -1);
             if (index < 0) return;
-            openQuickTodo(context, index);
+            if (isConfirmedDoubleTap(context, ACTION_EDIT, index)) {
+                openQuickTodo(context, index);
+            }
             return;
         }
 
@@ -87,6 +97,34 @@ public class LockTodoWidget extends AppWidgetProvider {
                 pending.finish();
             }
         }).start();
+    }
+
+    private static boolean isConfirmedDoubleTap(Context context, String action, int index) {
+        SharedPreferences prefs = AppPrefs.get(context);
+        long now = SystemClock.elapsedRealtime();
+        long lastTime = prefs.getLong(KEY_LAST_TAP_TIME, 0L);
+        String lastAction = prefs.getString(KEY_LAST_TAP_ACTION, "");
+        int lastIndex = prefs.getInt(KEY_LAST_TAP_INDEX, Integer.MIN_VALUE);
+
+        boolean confirmed = action.equals(lastAction)
+                && index == lastIndex
+                && now >= lastTime
+                && now - lastTime <= DOUBLE_TAP_WINDOW_MS;
+
+        SharedPreferences.Editor editor = prefs.edit();
+        if (confirmed) {
+            editor.remove(KEY_LAST_TAP_TIME)
+                    .remove(KEY_LAST_TAP_ACTION)
+                    .remove(KEY_LAST_TAP_INDEX)
+                    .apply();
+            return true;
+        }
+
+        editor.putLong(KEY_LAST_TAP_TIME, now)
+                .putString(KEY_LAST_TAP_ACTION, action)
+                .putInt(KEY_LAST_TAP_INDEX, index)
+                .apply();
+        return false;
     }
 
     private static void openQuickTodo(Context context, int editIndex) {

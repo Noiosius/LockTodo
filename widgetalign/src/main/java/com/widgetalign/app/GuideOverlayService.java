@@ -10,9 +10,9 @@ import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
-import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 
 public class GuideOverlayService extends Service {
@@ -50,25 +50,11 @@ public class GuideOverlayService extends Service {
 
         removeGuide();
 
-        SharedPreferences prefs = getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE);
-        float nx = prefs.getFloat(MainActivity.KEY_X, 0.12f);
-        float ny = prefs.getFloat(MainActivity.KEY_Y, 0.10f);
-        float nw = prefs.getFloat(MainActivity.KEY_W, 0.76f);
-        float nh = prefs.getFloat(MainActivity.KEY_H, 0.23f);
-
-        DisplayMetrics metrics = new DisplayMetrics();
-        windowManager.getDefaultDisplay().getRealMetrics(metrics);
-
-        int width = Math.max(1, Math.round(nw * metrics.widthPixels));
-        int height = Math.max(1, Math.round(nh * metrics.heightPixels));
-        int x = Math.round(nx * metrics.widthPixels);
-        int y = Math.round(ny * metrics.heightPixels);
-
         guideView = new OverlayGuideView(this);
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                width,
-                height,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                         ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                         : WindowManager.LayoutParams.TYPE_PHONE,
@@ -79,8 +65,8 @@ public class GuideOverlayService extends Service {
                 PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.TOP | Gravity.START;
-        params.x = x;
-        params.y = y;
+        params.x = 0;
+        params.y = 0;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             params.layoutInDisplayCutoutMode =
@@ -131,27 +117,51 @@ public class GuideOverlayService extends Service {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+
+            SharedPreferences prefs = getContext().getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE);
+            float nx = prefs.getFloat(MainActivity.KEY_X, 0.12f);
+            float ny = prefs.getFloat(MainActivity.KEY_Y, 0.10f);
+            float nw = prefs.getFloat(MainActivity.KEY_W, 0.76f);
+            float nh = prefs.getFloat(MainActivity.KEY_H, 0.23f);
+            float scale = prefs.getInt(MainActivity.KEY_SCALE, 100) / 100f;
+
+            // Draw inside the overlay's actual measured bounds instead of sizing a separate
+            // overlay window from getRealMetrics(). Samsung/One UI can use slightly different
+            // coordinate bounds for application overlays; using this canvas removes that mismatch.
+            float cx = (nx + nw / 2f) * getWidth();
+            float cy = (ny + nh / 2f) * getHeight();
+            float width = nw * getWidth() * scale;
+            float height = nh * getHeight() * scale;
+
+            float left = cx - width / 2f;
+            float top = cy - height / 2f;
+            float right = cx + width / 2f;
+            float bottom = cy + height / 2f;
+
             float inset = border.getStrokeWidth() / 2f + 1f;
-            float right = getWidth() - inset;
-            float bottom = getHeight() - inset;
+            left = Math.max(inset, left);
+            top = Math.max(inset, top);
+            right = Math.min(getWidth() - inset, right);
+            bottom = Math.min(getHeight() - inset, bottom);
 
-            canvas.drawRect(inset, inset, right, bottom, border);
+            canvas.drawRect(left, top, right, bottom, border);
 
-            float tick = 14f * getResources().getDisplayMetrics().density;
-            canvas.drawLine(inset, inset, inset + tick, inset, border);
-            canvas.drawLine(inset, inset, inset, inset + tick, border);
-            canvas.drawLine(right, inset, right - tick, inset, border);
-            canvas.drawLine(right, inset, right, inset + tick, border);
-            canvas.drawLine(inset, bottom, inset + tick, bottom, border);
-            canvas.drawLine(inset, bottom, inset, bottom - tick, border);
+            float density = getResources().getDisplayMetrics().density;
+            float tick = 14f * density;
+            canvas.drawLine(left, top, left + tick, top, border);
+            canvas.drawLine(left, top, left, top + tick, border);
+            canvas.drawLine(right, top, right - tick, top, border);
+            canvas.drawLine(right, top, right, top + tick, border);
+            canvas.drawLine(left, bottom, left + tick, bottom, border);
+            canvas.drawLine(left, bottom, left, bottom - tick, border);
             canvas.drawLine(right, bottom, right - tick, bottom, border);
             canvas.drawLine(right, bottom, right, bottom - tick, border);
 
-            float cx = getWidth() / 2f;
-            float cy = getHeight() / 2f;
-            float crossLen = 9f * getResources().getDisplayMetrics().density;
-            canvas.drawLine(cx - crossLen, cy, cx + crossLen, cy, cross);
-            canvas.drawLine(cx, cy - crossLen, cx, cy + crossLen, cross);
+            float centerX = (left + right) / 2f;
+            float centerY = (top + bottom) / 2f;
+            float crossLen = 9f * density;
+            canvas.drawLine(centerX - crossLen, centerY, centerX + crossLen, centerY, cross);
+            canvas.drawLine(centerX, centerY - crossLen, centerX, centerY + crossLen, cross);
         }
     }
 }

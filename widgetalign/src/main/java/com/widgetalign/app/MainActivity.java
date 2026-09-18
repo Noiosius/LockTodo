@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -30,6 +31,7 @@ public class MainActivity extends Activity {
     static final String KEY_Y = "y";
     static final String KEY_W = "w";
     static final String KEY_H = "h";
+    static final String KEY_SCALE = "scale";
 
     private SharedPreferences prefs;
     private AlignCanvasView canvas;
@@ -64,7 +66,7 @@ public class MainActivity extends Activity {
         top.addView(title, matchWrap());
 
         TextView guide = new TextView(this);
-        guide.setText("잠금화면 전체 캡처를 불러온 뒤 사각형을 시계에 맞추세요.\n사각형 안쪽: 이동 · 오른쪽 아래 점: 크기 조절");
+        guide.setText("잠금화면 전체 캡처를 불러온 뒤 사각형을 시계에 맞추세요.\n사각형 안쪽: 이동 · 오른쪽 아래 점: 크기 조절 · 아래 슬라이더: 실제 화면 보정");
         guide.setTextColor(Color.argb(155, 255, 255, 255));
         guide.setTextSize(12);
         guide.setLineSpacing(0, 1.15f);
@@ -76,6 +78,45 @@ public class MainActivity extends Activity {
         canvas = new AlignCanvasView(this);
         root.addView(canvas, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        LinearLayout scaleRow = new LinearLayout(this);
+        scaleRow.setOrientation(LinearLayout.VERTICAL);
+        scaleRow.setPadding(dp(18), dp(8), dp(18), dp(2));
+
+        LinearLayout scaleHeader = new LinearLayout(this);
+        scaleHeader.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView scaleLabel = new TextView(this);
+        scaleLabel.setText("가이드 크기 보정");
+        scaleLabel.setTextColor(Color.argb(220, 255, 255, 255));
+        scaleLabel.setTextSize(13);
+
+        TextView scaleValue = new TextView(this);
+        scaleValue.setTextColor(Color.argb(165, 255, 255, 255));
+        scaleValue.setTextSize(12);
+        scaleValue.setGravity(Gravity.END);
+
+        scaleHeader.addView(scaleLabel, new LinearLayout.LayoutParams(0, dp(28), 1f));
+        scaleHeader.addView(scaleValue, new LinearLayout.LayoutParams(dp(72), dp(28)));
+        scaleRow.addView(scaleHeader);
+
+        SeekBar scaleBar = new SeekBar(this);
+        scaleBar.setMax(70); // 80% ~ 150%
+        int currentScale = prefs.getInt(KEY_SCALE, 100);
+        currentScale = Math.max(80, Math.min(150, currentScale));
+        scaleBar.setProgress(currentScale - 80);
+        scaleValue.setText(currentScale + "%");
+        scaleBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = 80 + progress;
+                scaleValue.setText(value + "%");
+                prefs.edit().putInt(KEY_SCALE, value).apply();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        scaleRow.addView(scaleBar, matchWrap());
+        root.addView(scaleRow, matchWrap());
 
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);

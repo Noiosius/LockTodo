@@ -14,14 +14,15 @@ import java.util.List;
 
 final class BatteryReader {
     private static final double S21_FALLBACK_CAPACITY_MAH = 4000.0;
-    private static final int CURRENT_SAMPLE_WINDOW = 16;
-    private static final int MIN_ESTIMATE_SAMPLES = 12;
-    private static final int STABLE_WINDOWS_REQUIRED = 3;
-    private static final int MAX_WARMUP_SAMPLES = 24;
-    private static final double STABILITY_CV_LIMIT = 0.25;
+    // 0.5 s polling: 10 samples ≈ 5 seconds.
+    // Compare the previous 5-second window with the newest 5-second window.
+    private static final int FIVE_SECOND_SAMPLES = 10;
+    private static final int STABILITY_BUFFER_SAMPLES = FIVE_SECOND_SAMPLES * 2;
+    private static final int STABLE_CHECKS_REQUIRED = 3;
+    private static final double RECENT_CV_LIMIT = 0.08;
+    private static final double WINDOW_SHIFT_LIMIT = 0.04;
 
     private static final ArrayDeque<Double> currentSamplesMa = new ArrayDeque<>();
-    private static int validSampleCount = 0;
     private static int stableWindowCount = 0;
     private static boolean estimatesReady = false;
 
@@ -165,53 +166,90 @@ final class BatteryReader {
     private static synchronized double addAndGetSmoothedCurrent(double sampleMa) {
         if (!Double.isNaN(sampleMa) && sampleMa > 0.0) {
             currentSamplesMa.addLast(sampleMa);
-            validSampleCount++;
-            while (currentSamplesMa.size() > CURRENT_SAMPLE_WINDOW) {
+            while (currentSamplesMa.size() > STABILITY_BUFFER_SAMPLES) {
                 currentSamplesMa.removeFirst();
             }
         }
 
         if (currentSamplesMa.isEmpty()) return Double.NaN;
 
-        List<Double> values = new ArrayList<>(currentSamplesMa);
-        Collections.sort(values);
+        List<Double> chronological = new ArrayList<>(currentSamplesMa);
 
-        int trim;
-        if (values.size() >= MIN_ESTIMATE_SAMPLES) {
-            trim = 2;
-        } else if (values.size() >= 5) {
-            trim = 1;
-        } else {
-            trim = 0;
-        }
+        // The displayed current always follows the newest ~5 seconds, with one high and
+        // one low outlier removed when enough readings are available.
+        int recentStart = Math.max(0, chronological.size() - FIVE_SECOND_SAMPLES);
+        List<Double> recent = new ArrayList<>(chronological.subList(recentStart, chronological.size()));
+        double recentMean = trimmedMean(recent);
 
-        int start = trim;
-        int end = values.size() - trim;
-        double total = 0.0;
-        for (int i = start; i < end; i++) total += values.get(i);
-        double mean = total / (end - start);
+        // Do not reveal charging speed / remaining time until two adjacent 5-second windows
+        // are both calm and close to each other. There is intentionally no forced timeout:
+        // if the charging current is still drifting, the estimate stays hidden.
+        if (!estimatesReady && chronological.size() >= STABILITY_BUFFER_SAMPLES) {
+            List<Double> previous = new ArrayList<>(
+                    chronological.subList(0, FIVE_SECOND_SAMPLES));
+            List<Double> newest = new ArrayList<>(
+                    chronological.subList(FIVE_SECOND_SAMPLES, STABILITY_BUFFER_SAMPLES));
 
-        if (!estimatesReady && values.size() >= MIN_ESTIMATE_SAMPLES) {
-            double variance = 0.0;
-            for (int i = start; i < end; i++) {
-                double delta = values.get(i) - mean;
-                variance += delta * delta;
-            }
-            variance /= Math.max(1, end - start);
-            double coefficientOfVariation = mean > 0.0 ? Math.sqrt(variance) / mean : Double.POSITIVE_INFINITY;
+            double previousMean = trimmedMean(previous);
+            double newestMean = trimmedMean(newest);
+            double newestCv = trimmedCoefficientOfVariation(newest);
 
-            if (coefficientOfVariation <= STABILITY_CV_LIMIT) {
+            double windowShift = previousMean > 0.0
+                    ? Math.abs(newestMean - previousMean) / previousMean
+                    : Double.POSITIVE_INFINITY;
+
+            boolean stableNow = newestCv <= RECENT_CV_LIMIT
+                    && windowShift <= WINDOW_SHIFT_LIMIT;
+
+            if (stableNow) {
                 stableWindowCount++;
             } else {
                 stableWindowCount = 0;
             }
 
-            if (stableWindowCount >= STABLE_WINDOWS_REQUIRED || validSampleCount >= MAX_WARMUP_SAMPLES) {
+            if (stableWindowCount >= STABLE_CHECKS_REQUIRED) {
                 estimatesReady = true;
             }
         }
 
-        return mean;
+        return recentMean;
+    }
+
+    private static double trimmedMean(List<Double> source) {
+        if (source.isEmpty()) return Double.NaN;
+
+        List<Double> values = new ArrayList<>(source);
+        Collections.sort(values);
+        int trim = values.size() >= 5 ? 1 : 0;
+        int start = trim;
+        int end = values.size() - trim;
+
+        double total = 0.0;
+        for (int i = start; i < end; i++) total += values.get(i);
+        return total / Math.max(1, end - start);
+    }
+
+    private static double trimmedCoefficientOfVariation(List<Double> source) {
+        if (source.isEmpty()) return Double.POSITIVE_INFINITY;
+
+        List<Double> values = new ArrayList<>(source);
+        Collections.sort(values);
+        int trim = values.size() >= 5 ? 1 : 0;
+        int start = trim;
+        int end = values.size() - trim;
+
+        double total = 0.0;
+        for (int i = start; i < end; i++) total += values.get(i);
+        double mean = total / Math.max(1, end - start);
+        if (mean <= 0.0) return Double.POSITIVE_INFINITY;
+
+        double variance = 0.0;
+        for (int i = start; i < end; i++) {
+            double delta = values.get(i) - mean;
+            variance += delta * delta;
+        }
+        variance /= Math.max(1, end - start);
+        return Math.sqrt(variance) / mean;
     }
 
     static synchronized void resetEstimates() {
@@ -220,7 +258,6 @@ final class BatteryReader {
 
     private static synchronized void clearCurrentSamples() {
         currentSamplesMa.clear();
-        validSampleCount = 0;
         stableWindowCount = 0;
         estimatesReady = false;
     }

@@ -24,8 +24,8 @@ public class SettingsActivity extends Activity {
     private TextView sizeValue;
     private EditText colorInput;
     private TextView colorPreview;
-    private final Button[] positionButtons = new Button[9];
-    private int selectedPosition;
+    private PositionPickerView positionPicker;
+    private TextView positionValue;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,9 +35,7 @@ public class SettingsActivity extends Activity {
         window.setStatusBarColor(Color.BLACK);
         window.setNavigationBarColor(Color.BLACK);
 
-        selectedPosition = WidgetPrefs.position(this);
         setContentView(buildUi());
-        refreshPositionButtons();
     }
 
     private View buildUi() {
@@ -84,7 +82,12 @@ public class SettingsActivity extends Activity {
 
         sizeSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                sizeValue.setText((progress + 24) + "sp");
+                int size = progress + 24;
+                sizeValue.setText(size + "sp");
+                if (positionPicker != null) {
+                    Integer color = parseColor(colorInput == null ? null : colorInput.getText().toString());
+                    positionPicker.setPreviewStyle(size, color == null ? WidgetPrefs.textColor(SettingsActivity.this) : color);
+                }
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -120,7 +123,12 @@ public class SettingsActivity extends Activity {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 Integer color = parseColor(s.toString());
-                if (color != null) colorPreview.setBackgroundColor(color);
+                if (color != null) {
+                    colorPreview.setBackgroundColor(color);
+                    if (positionPicker != null) {
+                        positionPicker.setPreviewStyle(sizeSeek.getProgress() + 24, color);
+                    }
+                }
             }
             @Override public void afterTextChanged(Editable s) {}
         });
@@ -151,36 +159,28 @@ public class SettingsActivity extends Activity {
         positionLabelParams.topMargin = dp(28);
         root.addView(positionLabel, positionLabelParams);
 
-        String[][] symbols = {
-                {"↖", "↑", "↗"},
-                {"←", "●", "→"},
-                {"↙", "↓", "↘"}
-        };
-        int index = 0;
-        for (int row = 0; row < 3; row++) {
-            LinearLayout line = new LinearLayout(this);
-            line.setOrientation(LinearLayout.HORIZONTAL);
-            for (int col = 0; col < 3; col++) {
-                final int position = index;
-                Button button = new Button(this);
-                button.setText(symbols[row][col]);
-                button.setTextSize(18);
-                button.setAllCaps(false);
-                button.setOnClickListener(v -> {
-                    selectedPosition = position;
-                    refreshPositionButtons();
-                });
-                positionButtons[index] = button;
-                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(48), 1f);
-                if (col > 0) p.leftMargin = dp(4);
-                line.addView(button, p);
-                index++;
-            }
-            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            if (row > 0) rowParams.topMargin = dp(4);
-            root.addView(line, rowParams);
-        }
+        TextView positionGuide = new TextView(this);
+        positionGuide.setText("아래 미리보기에서 숫자를 직접 끌어서 원하는 위치에 놓으세요.");
+        positionGuide.setTextColor(Color.rgb(125, 125, 125));
+        positionGuide.setTextSize(12);
+        positionGuide.setPadding(0, dp(6), 0, dp(8));
+        root.addView(positionGuide);
+
+        positionPicker = new PositionPickerView(this);
+        positionPicker.setPosition(WidgetPrefs.positionX(this), WidgetPrefs.positionY(this));
+        positionPicker.setPreviewStyle(sizeSeek.getProgress() + 24, currentColor);
+        root.addView(positionPicker, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(210)));
+
+        positionValue = new TextView(this);
+        positionValue.setTextColor(Color.rgb(135, 135, 135));
+        positionValue.setTextSize(11);
+        positionValue.setGravity(Gravity.CENTER);
+        positionValue.setPadding(0, dp(5), 0, 0);
+        root.addView(positionValue);
+        updatePositionValue();
+
+        positionPicker.setOnPositionChangedListener((x, y) -> updatePositionValue());
 
         Button save = new Button(this);
         save.setAllCaps(false);
@@ -198,7 +198,13 @@ public class SettingsActivity extends Activity {
                 return;
             }
             int size = sizeSeek.getProgress() + 24;
-            WidgetPrefs.save(this, size, color, selectedPosition);
+            WidgetPrefs.save(
+                    this,
+                    size,
+                    color,
+                    positionPicker.getPositionX(),
+                    positionPicker.getPositionY()
+            );
             DayCountWidget.updateAll(this);
             finish();
         });
@@ -214,14 +220,11 @@ public class SettingsActivity extends Activity {
         return label;
     }
 
-    private void refreshPositionButtons() {
-        for (int i = 0; i < positionButtons.length; i++) {
-            Button b = positionButtons[i];
-            if (b == null) continue;
-            boolean selected = i == selectedPosition;
-            b.setTextColor(selected ? Color.WHITE : Color.rgb(170, 170, 170));
-            b.setBackgroundColor(selected ? Color.rgb(70, 70, 70) : Color.rgb(30, 30, 30));
-        }
+    private void updatePositionValue() {
+        if (positionPicker == null || positionValue == null) return;
+        int x = Math.round(positionPicker.getPositionX() * 100f);
+        int y = Math.round(positionPicker.getPositionY() * 100f);
+        positionValue.setText("가로 " + x + "%  ·  세로 " + y + "%");
     }
 
     private Integer parseColor(String text) {

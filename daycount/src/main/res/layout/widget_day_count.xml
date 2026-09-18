@@ -10,7 +10,7 @@
         android:id="@+id/day_count_text"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center"
+        android:gravity="top|start"
         android:fontFamily="sans-serif-medium"
         android:includeFontPadding="false"
         android:maxLines="1"

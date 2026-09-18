@@ -57,7 +57,7 @@ jobs:
       - name: Upload Day Count APK
         uses: actions/upload-artifact@v4
         with:
-          name: Day-Count-v0.2-apk
+          name: Day-Count-v0.3-apk
           path: daycount/build/outputs/apk/debug/daycount-debug.apk
           if-no-files-found: error
 

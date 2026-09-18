@@ -12,7 +12,6 @@ import android.os.Looper;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.style.ForegroundColorSpan;
-import android.text.style.RelativeSizeSpan;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -175,18 +174,16 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        TextView subView = null;
-        if (withSubValue) {
-            subView = new TextView(this);
-            subView.setText("—");
-            subView.setTextColor(Color.argb(170, 255, 255, 255));
-            subView.setTextSize(10.5f * textScale / 100f);
-            subView.setGravity(Gravity.CENTER);
-            subView.setPadding(0, dp(2), 0, 0);
-            column.addView(subView, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-        }
+        TextView subView = new TextView(this);
+        subView.setText(withSubValue ? "—" : "");
+        subView.setTextColor(Color.argb(170, 255, 255, 255));
+        subView.setTextSize(10.5f * textScale / 100f);
+        subView.setGravity(Gravity.CENTER);
+        subView.setPadding(0, dp(2), 0, 0);
+        if (!withSubValue) subView.setVisibility(View.INVISIBLE);
+        column.addView(subView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         parent.addView(column, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         return new Metric(valueView, subView);
@@ -245,14 +242,14 @@ public class MainActivity extends Activity {
     }
 
     private CharSequence measuringDots() {
-        String dots = "●  ●  ●";
+        String dots = "· · ·";
         SpannableString span = new SpannableString(dots);
-        int[] positions = {0, 3, 6};
+        int[] positions = {0, 2, 4};
 
         for (int i = 0; i < positions.length; i++) {
             int color = i == loadingPhase
-                    ? Color.argb(190, 255, 255, 255)
-                    : Color.argb(70, 255, 255, 255);
+                    ? Color.argb(180, 255, 255, 255)
+                    : Color.argb(48, 255, 255, 255);
             span.setSpan(
                     new ForegroundColorSpan(color),
                     positions[i],
@@ -260,13 +257,6 @@ public class MainActivity extends Activity {
                     Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
             );
         }
-
-        span.setSpan(
-                new RelativeSizeSpan(0.62f),
-                0,
-                span.length(),
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-        );
         return span;
     }
 

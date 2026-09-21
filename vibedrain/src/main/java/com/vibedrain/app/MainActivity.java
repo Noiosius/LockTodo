@@ -36,9 +36,9 @@ public class MainActivity extends Activity {
     private TextView frequencyValue;
     private TextView volumeValue;
 
-    private int vibrationStrength = 60;
+    private int vibrationStrength = 100;
     private int toneFrequency = 165;
-    private int toneVolume = 65;
+    private int toneVolume = 100;
 
     private boolean vibrationRunning = false;
     private boolean toneRunning = false;
@@ -205,7 +205,7 @@ public class MainActivity extends Activity {
         });
         card.addView(volume);
 
-        TextView hint = hint("기본 165 Hz · 휴대폰 내장 스피커로 출력");
+        TextView hint = hint("기본 165 Hz · 시작 시 미디어 음량을 최대로 올리고 종료하면 원래 값으로 복원");
         card.addView(hint);
 
         return card;
@@ -410,15 +410,20 @@ public class MainActivity extends Activity {
         private static final int SAMPLE_RATE = 44100;
 
         private final Context context;
+        private final AudioManager audioManager;
         private volatile double frequency = 165.0;
-        private volatile float volume = 0.65f;
+        private volatile float volume = 1.0f;
         private volatile boolean running = false;
 
         private AudioTrack track;
         private Thread thread;
+        private int previousMusicVolume = -1;
+        private boolean mediaVolumeForced = false;
 
         TonePlayer(Context context) {
             this.context = context.getApplicationContext();
+            this.audioManager =
+                    (AudioManager) this.context.getSystemService(Context.AUDIO_SERVICE);
         }
 
         void setFrequency(double frequency) {
@@ -436,6 +441,7 @@ public class MainActivity extends Activity {
         synchronized void start() {
             if (running) return;
             running = true;
+            forceMaximumMediaVolume();
 
             int min = AudioTrack.getMinBufferSize(
                     SAMPLE_RATE,
@@ -468,6 +474,7 @@ public class MainActivity extends Activity {
             try { track.play(); } catch (Throwable e) {
                 running = false;
                 releaseTrack();
+                restoreMediaVolume();
                 return;
             }
 
@@ -538,10 +545,42 @@ public class MainActivity extends Activity {
             thread = null;
 
             releaseTrack();
+            restoreMediaVolume();
         }
 
         synchronized void release() {
             stop();
+            restoreMediaVolume();
+        }
+
+        private void forceMaximumMediaVolume() {
+            if (audioManager == null || mediaVolumeForced) return;
+            try {
+                previousMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0);
+                mediaVolumeForced = true;
+            } catch (Throwable ignored) {
+                previousMusicVolume = -1;
+                mediaVolumeForced = false;
+            }
+        }
+
+        private void restoreMediaVolume() {
+            if (audioManager == null || !mediaVolumeForced) return;
+            try {
+                if (previousMusicVolume >= 0) {
+                    audioManager.setStreamVolume(
+                            AudioManager.STREAM_MUSIC,
+                            previousMusicVolume,
+                            0
+                    );
+                }
+            } catch (Throwable ignored) {
+            } finally {
+                previousMusicVolume = -1;
+                mediaVolumeForced = false;
+            }
         }
 
         private void releaseTrack() {

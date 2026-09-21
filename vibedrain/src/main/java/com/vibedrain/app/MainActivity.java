@@ -293,25 +293,53 @@ public class MainActivity extends Activity {
     }
 
     private void startVibration() {
-        if (vibrator == null) return;
+        if (vibrator == null || !vibrator.hasVibrator()) return;
 
         int amplitude = Math.max(1, Math.min(255,
                 Math.round(255f * vibrationStrength / 100f)));
 
+        AudioAttributes vibrationAttributes = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build();
+
         try {
+            vibrator.cancel();
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Repeat the complete waveform from index 0. Some Samsung devices are
+                // unreliable when a repeating waveform starts from a non-zero repeat index.
+                int actualAmplitude = vibrator.hasAmplitudeControl()
+                        ? amplitude
+                        : VibrationEffect.DEFAULT_AMPLITUDE;
+
                 VibrationEffect effect = VibrationEffect.createWaveform(
-                        new long[]{0L, 5000L},
-                        new int[]{0, amplitude},
-                        1
+                        new long[]{0L, 1000L},
+                        new int[]{0, actualAmplitude},
+                        0
                 );
-                vibrator.cancel();
-                vibrator.vibrate(effect);
+                vibrator.vibrate(effect, vibrationAttributes);
             } else {
-                vibrator.cancel();
-                vibrator.vibrate(new long[]{0L, 5000L}, 1);
+                vibrator.vibrate(new long[]{0L, 1000L}, 0, vibrationAttributes);
             }
         } catch (Throwable ignored) {
+            // Last-resort fallback: request a normal one-shot vibration.
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(
+                            VibrationEffect.createOneShot(
+                                    1200L,
+                                    vibrator.hasAmplitudeControl()
+                                            ? amplitude
+                                            : VibrationEffect.DEFAULT_AMPLITUDE
+                            ),
+                            vibrationAttributes
+                    );
+                } else {
+                    vibrator.vibrate(1200L);
+                }
+            } catch (Throwable ignoredAgain) {
+            }
         }
     }
 

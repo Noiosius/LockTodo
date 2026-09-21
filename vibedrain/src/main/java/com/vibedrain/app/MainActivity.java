@@ -46,7 +46,6 @@ public class MainActivity extends Activity {
 
     private TextView vibrationValue;
     private TextView frequencyValue;
-    private TextView volumeValue;
     private TextView toneHint;
 
     private LinearLayout frequencyRow;
@@ -54,7 +53,6 @@ public class MainActivity extends Activity {
 
     private int vibrationStrength = 100;
     private int toneFrequency = 165;
-    private int toneVolume = 100;
 
     private boolean vibrationRunning = false;
     private boolean toneRunning = false;
@@ -113,7 +111,10 @@ public class MainActivity extends Activity {
         root.addView(buildSpeakerCard(), speakerParams);
 
         TextView note = new TextView(this);
-        note.setText("배수 모드는 150–220 Hz를 자동으로 왕복하며 출력합니다.\n충전단자에 습기 경고가 있으면 완전히 마를 때까지 충전하지 마세요.");
+        note.setText(
+                "앱은 미디어 음량을 변경하지 않습니다. 소리 크기는 휴대폰 미디어 음량으로 조절하세요.\n"
+                        + "충전단자에 습기 경고가 있으면 완전히 마를 때까지 충전하지 마세요."
+        );
         note.setTextColor(Color.rgb(105, 105, 105));
         note.setTextSize(11);
         note.setLineSpacing(0, 1.25f);
@@ -231,32 +232,6 @@ public class MainActivity extends Activity {
         });
         card.addView(frequencySeek);
 
-        LinearLayout volumeRow = valueRow("출력");
-        volumeValue = (TextView) volumeRow.getChildAt(1);
-        volumeValue.setText(toneVolume + "%");
-        LinearLayout.LayoutParams volumeRowParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        volumeRowParams.topMargin = dp(10);
-        card.addView(volumeRow, volumeRowParams);
-
-        SeekBar volume = new SeekBar(this);
-        volume.setMax(99);
-        volume.setProgress(toneVolume - 1);
-        volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                toneVolume = progress + 1;
-                volumeValue.setText(toneVolume + "%");
-                tonePlayer.setVolume(toneVolume / 100f);
-            }
-
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        });
-        card.addView(volume);
-
         toneHint = hint("");
         card.addView(toneHint);
 
@@ -290,9 +265,9 @@ public class MainActivity extends Activity {
 
         if (toneHint != null) {
             if (drainMode) {
-                toneHint.setText("150–220 Hz 자동 스윕 · 강화 파형");
+                toneHint.setText("150–220 Hz 자동 스윕 · 소리 크기는 미디어 음량으로 조절");
             } else {
-                toneHint.setText("120–240 Hz 단음 · 주파수 직접 조절");
+                toneHint.setText("120–240 Hz 단음 · 소리 크기는 미디어 음량으로 조절");
             }
         }
     }
@@ -459,7 +434,6 @@ public class MainActivity extends Activity {
         if (toneRunning) {
             tonePlayer.setDrainMode(drainMode);
             tonePlayer.setFrequency(toneFrequency);
-            tonePlayer.setVolume(toneVolume / 100f);
             tonePlayer.start();
             toneButton.setText("정지");
         } else {
@@ -565,31 +539,23 @@ public class MainActivity extends Activity {
         private static final double DRAIN_MAX_HZ = 220.0;
         private static final double DRAIN_SWEEP_SECONDS = 2.4;
 
-        private final Context context;
         private final AudioManager audioManager;
 
         private volatile double frequency = 165.0;
-        private volatile float volume = 1.0f;
         private volatile boolean drainMode = true;
         private volatile boolean running = false;
 
         private AudioTrack track;
         private Thread thread;
-        private int previousMusicVolume = -1;
-        private boolean mediaVolumeForced = false;
 
         TonePlayer(Context context) {
-            this.context = context.getApplicationContext();
+            Context appContext = context.getApplicationContext();
             this.audioManager =
-                    (AudioManager) this.context.getSystemService(Context.AUDIO_SERVICE);
+                    (AudioManager) appContext.getSystemService(Context.AUDIO_SERVICE);
         }
 
         void setFrequency(double frequency) {
             this.frequency = Math.max(120.0, Math.min(240.0, frequency));
-        }
-
-        void setVolume(float volume) {
-            this.volume = Math.max(0.01f, Math.min(1f, volume));
         }
 
         void setDrainMode(boolean drainMode) {
@@ -599,7 +565,6 @@ public class MainActivity extends Activity {
         synchronized void start() {
             if (running) return;
             running = true;
-            forceMaximumMediaVolume();
 
             int min = AudioTrack.getMinBufferSize(
                     SAMPLE_RATE,
@@ -634,7 +599,6 @@ public class MainActivity extends Activity {
             } catch (Throwable e) {
                 running = false;
                 releaseTrack();
-                restoreMediaVolume();
                 return;
             }
 
@@ -650,7 +614,6 @@ public class MainActivity extends Activity {
 
             while (running) {
                 boolean drain = drainMode;
-                float gain = volume;
 
                 for (int i = 0; i < buffer.length; i++) {
                     double f;
@@ -673,13 +636,11 @@ public class MainActivity extends Activity {
                     if (drain) {
                         double raw = Math.sin(phase)
                                 + 0.30 * Math.sin(phase * 3.0);
-                        double clipped = Math.tanh(raw * 1.55) / Math.tanh(1.55);
-                        sample = clipped;
+                        sample = Math.tanh(raw * 1.55) / Math.tanh(1.55);
                     } else {
                         sample = Math.sin(phase);
                     }
 
-                    sample *= gain;
                     sample = Math.max(-1.0, Math.min(1.0, sample));
                     buffer[i] = (short) Math.round(sample * 32767.0);
                     sampleIndex++;
@@ -740,46 +701,10 @@ public class MainActivity extends Activity {
             thread = null;
 
             releaseTrack();
-            restoreMediaVolume();
         }
 
         synchronized void release() {
             stop();
-            restoreMediaVolume();
-        }
-
-        private void forceMaximumMediaVolume() {
-            if (audioManager == null || mediaVolumeForced) return;
-
-            try {
-                previousMusicVolume =
-                        audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                int max =
-                        audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0);
-                mediaVolumeForced = true;
-            } catch (Throwable ignored) {
-                previousMusicVolume = -1;
-                mediaVolumeForced = false;
-            }
-        }
-
-        private void restoreMediaVolume() {
-            if (audioManager == null || !mediaVolumeForced) return;
-
-            try {
-                if (previousMusicVolume >= 0) {
-                    audioManager.setStreamVolume(
-                            AudioManager.STREAM_MUSIC,
-                            previousMusicVolume,
-                            0
-                    );
-                }
-            } catch (Throwable ignored) {
-            } finally {
-                previousMusicVolume = -1;
-                mediaVolumeForced = false;
-            }
         }
 
         private void releaseTrack() {

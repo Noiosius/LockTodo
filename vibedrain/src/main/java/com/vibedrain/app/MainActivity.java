@@ -2,29 +2,19 @@ package com.vibedrain.app;
 
 import android.Manifest;
 import android.app.Activity;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.media.AudioAttributes;
-import android.media.AudioDeviceInfo;
-import android.media.AudioFormat;
-import android.media.AudioManager;
-import android.media.AudioTrack;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
-import android.os.VibratorManager;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -35,9 +25,6 @@ public class MainActivity extends Activity {
     private static final int REQUEST_NOTIFICATIONS = 4201;
     private static final String SETUP_PREFS = "vibe_drain_setup";
     private static final String KEY_MOISTURE_SETUP_ASKED = "moisture_setup_asked_v1";
-
-    private Vibrator vibrator;
-    private TonePlayer tonePlayer;
 
     private Button vibrationButton;
     private Button toneButton;
@@ -65,13 +52,62 @@ public class MainActivity extends Activity {
         Window window = getWindow();
         window.setStatusBarColor(Color.rgb(12, 12, 12));
         window.setNavigationBarColor(Color.rgb(12, 12, 12));
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        vibrator = getVibrator();
-        tonePlayer = new TonePlayer(this);
-
+        loadRuntimeState();
         setContentView(buildUi());
         maybeRequestMoistureIntegration();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        loadRuntimeState();
+        refreshUiState();
+    }
+
+    private void loadRuntimeState() {
+        SharedPreferences prefs = getSharedPreferences(
+                DrainForegroundService.STATE_PREFS,
+                MODE_PRIVATE
+        );
+        vibrationStrength = prefs.getInt(
+                DrainForegroundService.KEY_VIBRATION_STRENGTH,
+                vibrationStrength
+        );
+        toneFrequency = prefs.getInt(
+                DrainForegroundService.KEY_TONE_FREQUENCY,
+                toneFrequency
+        );
+        drainMode = prefs.getBoolean(
+                DrainForegroundService.KEY_DRAIN_MODE,
+                drainMode
+        );
+        vibrationRunning = prefs.getBoolean(
+                DrainForegroundService.KEY_VIBRATION_RUNNING,
+                false
+        );
+        toneRunning = prefs.getBoolean(
+                DrainForegroundService.KEY_TONE_RUNNING,
+                false
+        );
+    }
+
+    private void persistControls() {
+        getSharedPreferences(DrainForegroundService.STATE_PREFS, MODE_PRIVATE)
+                .edit()
+                .putInt(
+                        DrainForegroundService.KEY_VIBRATION_STRENGTH,
+                        vibrationStrength
+                )
+                .putInt(
+                        DrainForegroundService.KEY_TONE_FREQUENCY,
+                        toneFrequency
+                )
+                .putBoolean(
+                        DrainForegroundService.KEY_DRAIN_MODE,
+                        drainMode
+                )
+                .apply();
     }
 
     private View buildUi() {
@@ -112,8 +148,8 @@ public class MainActivity extends Activity {
 
         TextView note = new TextView(this);
         note.setText(
-                "앱은 미디어 음량을 변경하지 않습니다. 소리 크기는 휴대폰 미디어 음량으로 조절하세요.\n"
-                        + "충전단자에 습기 경고가 있으면 완전히 마를 때까지 충전하지 마세요."
+                "실행 중에는 화면을 끄거나 다른 앱으로 이동해도 계속 작동합니다.\n"
+                        + "소리 크기는 휴대폰 미디어 음량으로 조절하세요."
         );
         note.setTextColor(Color.rgb(105, 105, 105));
         note.setTextSize(11);
@@ -129,16 +165,21 @@ public class MainActivity extends Activity {
 
         card.addView(header("진동"));
 
-        vibrationButton = actionButton("시작");
+        vibrationButton = actionButton(vibrationRunning ? "정지" : "시작");
+        applyButtonStyle(vibrationButton, vibrationRunning);
         vibrationButton.setOnClickListener(v -> toggleVibration());
+
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(50)
+        );
         buttonParams.topMargin = dp(12);
         card.addView(vibrationButton, buttonParams);
 
         LinearLayout labelRow = valueRow("세기");
         vibrationValue = (TextView) labelRow.getChildAt(1);
         vibrationValue.setText(vibrationStrength + "%");
+
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -148,13 +189,28 @@ public class MainActivity extends Activity {
 
         SeekBar strength = new SeekBar(this);
         strength.setMax(99);
-        strength.setProgress(vibrationStrength - 1);
+        strength.setProgress(Math.max(0, Math.min(99, vibrationStrength - 1)));
         strength.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            public void onProgressChanged(
+                    SeekBar seekBar,
+                    int progress,
+                    boolean fromUser
+            ) {
                 vibrationStrength = progress + 1;
                 vibrationValue.setText(vibrationStrength + "%");
-                if (vibrationRunning) startVibration();
+                persistControls();
+
+                if (vibrationRunning) {
+                    Intent intent = serviceIntent(
+                            DrainForegroundService.ACTION_UPDATE_VIBRATION
+                    );
+                    intent.putExtra(
+                            DrainForegroundService.EXTRA_VIBRATION_STRENGTH,
+                            vibrationStrength
+                    );
+                    startService(intent);
+                }
             }
 
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -183,12 +239,18 @@ public class MainActivity extends Activity {
         drainModeButton.setOnClickListener(v -> setSpeakerMode(true));
 
         LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(
-                0, dp(44), 1f);
+                0,
+                dp(44),
+                1f
+        );
         left.rightMargin = dp(5);
         modeRow.addView(singleModeButton, left);
 
         LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(
-                0, dp(44), 1f);
+                0,
+                dp(44),
+                1f
+        );
         right.leftMargin = dp(5);
         modeRow.addView(drainModeButton, right);
 
@@ -199,16 +261,21 @@ public class MainActivity extends Activity {
         modeParams.topMargin = dp(12);
         card.addView(modeRow, modeParams);
 
-        toneButton = actionButton("시작");
+        toneButton = actionButton(toneRunning ? "정지" : "시작");
+        applyButtonStyle(toneButton, toneRunning);
         toneButton.setOnClickListener(v -> toggleTone());
+
         LinearLayout.LayoutParams startParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(50)
+        );
         startParams.topMargin = dp(10);
         card.addView(toneButton, startParams);
 
         frequencyRow = valueRow("주파수");
         frequencyValue = (TextView) frequencyRow.getChildAt(1);
         frequencyValue.setText(toneFrequency + " Hz");
+
         LinearLayout.LayoutParams freqRowParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -218,40 +285,50 @@ public class MainActivity extends Activity {
 
         frequencySeek = new SeekBar(this);
         frequencySeek.setMax(120);
-        frequencySeek.setProgress(toneFrequency - 120);
-        frequencySeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                toneFrequency = 120 + progress;
-                frequencyValue.setText(toneFrequency + " Hz");
-                tonePlayer.setFrequency(toneFrequency);
-            }
+        frequencySeek.setProgress(
+                Math.max(0, Math.min(120, toneFrequency - 120))
+        );
+        frequencySeek.setOnSeekBarChangeListener(
+                new SeekBar.OnSeekBarChangeListener() {
+                    @Override
+                    public void onProgressChanged(
+                            SeekBar seekBar,
+                            int progress,
+                            boolean fromUser
+                    ) {
+                        toneFrequency = 120 + progress;
+                        frequencyValue.setText(toneFrequency + " Hz");
+                        persistControls();
 
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        });
+                        if (toneRunning && !drainMode) {
+                            sendToneUpdate();
+                        }
+                    }
+
+                    @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+                    @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+                }
+        );
         card.addView(frequencySeek);
 
         toneHint = hint("");
         card.addView(toneHint);
 
-        setSpeakerMode(true);
+        applySpeakerModeUi();
         return card;
     }
 
     private void setSpeakerMode(boolean useDrainMode) {
-        if (toneRunning) {
-            tonePlayer.stop();
-            toneRunning = false;
-            if (toneButton != null) {
-                toneButton.setText("시작");
-                applyButtonStyle(toneButton, false);
-            }
-        }
-
         drainMode = useDrainMode;
-        tonePlayer.setDrainMode(drainMode);
+        persistControls();
+        applySpeakerModeUi();
 
+        if (toneRunning) {
+            sendToneUpdate();
+        }
+    }
+
+    private void applySpeakerModeUi() {
         if (singleModeButton != null) {
             applyModeButtonStyle(singleModeButton, !drainMode);
         }
@@ -265,10 +342,135 @@ public class MainActivity extends Activity {
 
         if (toneHint != null) {
             if (drainMode) {
-                toneHint.setText("150–220 Hz 자동 스윕 · 소리 크기는 미디어 음량으로 조절");
+                toneHint.setText(
+                        "150–220 Hz 자동 스윕 · 화면이 꺼져도 계속 재생"
+                );
             } else {
-                toneHint.setText("120–240 Hz 단음 · 소리 크기는 미디어 음량으로 조절");
+                toneHint.setText(
+                        "120–240 Hz 단음 · 화면이 꺼져도 계속 재생"
+                );
             }
+        }
+    }
+
+    private void refreshUiState() {
+        if (vibrationValue != null) {
+            vibrationValue.setText(vibrationStrength + "%");
+        }
+        if (frequencyValue != null) {
+            frequencyValue.setText(toneFrequency + " Hz");
+        }
+        if (frequencySeek != null) {
+            frequencySeek.setProgress(
+                    Math.max(0, Math.min(120, toneFrequency - 120))
+            );
+        }
+
+        if (vibrationButton != null) {
+            vibrationButton.setText(vibrationRunning ? "정지" : "시작");
+            applyButtonStyle(vibrationButton, vibrationRunning);
+        }
+
+        if (toneButton != null) {
+            toneButton.setText(toneRunning ? "정지" : "시작");
+            applyButtonStyle(toneButton, toneRunning);
+        }
+
+        applySpeakerModeUi();
+    }
+
+    private void toggleVibration() {
+        if (vibrationRunning) {
+            startService(
+                    serviceIntent(
+                            DrainForegroundService.ACTION_STOP_VIBRATION
+                    )
+            );
+            vibrationRunning = false;
+        } else {
+            Intent intent = serviceIntent(
+                    DrainForegroundService.ACTION_START_VIBRATION
+            );
+            intent.putExtra(
+                    DrainForegroundService.EXTRA_VIBRATION_STRENGTH,
+                    vibrationStrength
+            );
+            startOutputService(intent);
+            vibrationRunning = true;
+        }
+
+        getSharedPreferences(
+                DrainForegroundService.STATE_PREFS,
+                MODE_PRIVATE
+        ).edit().putBoolean(
+                DrainForegroundService.KEY_VIBRATION_RUNNING,
+                vibrationRunning
+        ).apply();
+
+        refreshUiState();
+    }
+
+    private void toggleTone() {
+        if (toneRunning) {
+            startService(
+                    serviceIntent(
+                            DrainForegroundService.ACTION_STOP_TONE
+                    )
+            );
+            toneRunning = false;
+        } else {
+            Intent intent = serviceIntent(
+                    DrainForegroundService.ACTION_START_TONE
+            );
+            intent.putExtra(
+                    DrainForegroundService.EXTRA_DRAIN_MODE,
+                    drainMode
+            );
+            intent.putExtra(
+                    DrainForegroundService.EXTRA_TONE_FREQUENCY,
+                    toneFrequency
+            );
+            startOutputService(intent);
+            toneRunning = true;
+        }
+
+        getSharedPreferences(
+                DrainForegroundService.STATE_PREFS,
+                MODE_PRIVATE
+        ).edit().putBoolean(
+                DrainForegroundService.KEY_TONE_RUNNING,
+                toneRunning
+        ).apply();
+
+        refreshUiState();
+    }
+
+    private void sendToneUpdate() {
+        Intent intent = serviceIntent(
+                DrainForegroundService.ACTION_UPDATE_TONE
+        );
+        intent.putExtra(
+                DrainForegroundService.EXTRA_DRAIN_MODE,
+                drainMode
+        );
+        intent.putExtra(
+                DrainForegroundService.EXTRA_TONE_FREQUENCY,
+                toneFrequency
+        );
+        startService(intent);
+    }
+
+    private Intent serviceIntent(String action) {
+        Intent intent = new Intent(this, DrainForegroundService.class);
+        intent.setAction(action);
+        return intent;
+    }
+
+    private void startOutputService(Intent intent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
         }
     }
 
@@ -290,7 +492,9 @@ public class MainActivity extends Activity {
         view.setText(text);
         view.setTextColor(Color.WHITE);
         view.setTextSize(17);
-        view.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        view.setTypeface(
+                Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        );
         return view;
     }
 
@@ -314,7 +518,11 @@ public class MainActivity extends Activity {
 
     private void applyButtonStyle(Button button, boolean active) {
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(active ? Color.rgb(235, 235, 235) : Color.rgb(42, 42, 42));
+        bg.setColor(
+                active
+                        ? Color.rgb(235, 235, 235)
+                        : Color.rgb(42, 42, 42)
+        );
         bg.setCornerRadius(dp(16));
         button.setTextColor(active ? Color.BLACK : Color.WHITE);
         button.setBackground(bg);
@@ -322,12 +530,21 @@ public class MainActivity extends Activity {
 
     private void applyModeButtonStyle(Button button, boolean selected) {
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(selected ? Color.rgb(224, 224, 224) : Color.rgb(34, 34, 34));
+        bg.setColor(
+                selected
+                        ? Color.rgb(224, 224, 224)
+                        : Color.rgb(34, 34, 34)
+        );
         bg.setCornerRadius(dp(14));
-        bg.setStroke(dp(1), selected
-                ? Color.rgb(224, 224, 224)
-                : Color.rgb(58, 58, 58));
-        button.setTextColor(selected ? Color.BLACK : Color.rgb(165, 165, 165));
+        bg.setStroke(
+                dp(1),
+                selected
+                        ? Color.rgb(224, 224, 224)
+                        : Color.rgb(58, 58, 58)
+        );
+        button.setTextColor(
+                selected ? Color.BLACK : Color.rgb(165, 165, 165)
+        );
         button.setBackground(bg);
     }
 
@@ -340,13 +557,19 @@ public class MainActivity extends Activity {
         label.setText(labelText);
         label.setTextColor(Color.rgb(165, 165, 165));
         label.setTextSize(12);
-        row.addView(label, new LinearLayout.LayoutParams(0, dp(28), 1f));
+        row.addView(
+                label,
+                new LinearLayout.LayoutParams(0, dp(28), 1f)
+        );
 
         TextView value = new TextView(this);
         value.setTextColor(Color.WHITE);
         value.setTextSize(12);
         value.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        row.addView(value, new LinearLayout.LayoutParams(dp(88), dp(28)));
+        row.addView(
+                value,
+                new LinearLayout.LayoutParams(dp(88), dp(28))
+        );
 
         return row;
     }
@@ -360,107 +583,17 @@ public class MainActivity extends Activity {
         return hint;
     }
 
-    private void toggleVibration() {
-        vibrationRunning = !vibrationRunning;
-        if (vibrationRunning) {
-            startVibration();
-            vibrationButton.setText("정지");
-        } else {
-            stopVibration();
-            vibrationButton.setText("시작");
-        }
-        applyButtonStyle(vibrationButton, vibrationRunning);
-    }
-
-    private void startVibration() {
-        if (vibrator == null || !vibrator.hasVibrator()) return;
-
-        int amplitude = Math.max(1, Math.min(255,
-                Math.round(255f * vibrationStrength / 100f)));
-
-        AudioAttributes vibrationAttributes = new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build();
-
-        try {
-            vibrator.cancel();
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                int actualAmplitude = vibrator.hasAmplitudeControl()
-                        ? amplitude
-                        : VibrationEffect.DEFAULT_AMPLITUDE;
-
-                VibrationEffect effect = VibrationEffect.createWaveform(
-                        new long[]{0L, 1000L},
-                        new int[]{0, actualAmplitude},
-                        0
-                );
-                vibrator.vibrate(effect, vibrationAttributes);
-            } else {
-                vibrator.vibrate(new long[]{0L, 1000L}, 0, vibrationAttributes);
-            }
-        } catch (Throwable ignored) {
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(
-                            VibrationEffect.createOneShot(
-                                    1200L,
-                                    vibrator.hasAmplitudeControl()
-                                            ? amplitude
-                                            : VibrationEffect.DEFAULT_AMPLITUDE
-                            ),
-                            vibrationAttributes
-                    );
-                } else {
-                    vibrator.vibrate(1200L);
-                }
-            } catch (Throwable ignoredAgain) {
-            }
-        }
-    }
-
-    private void stopVibration() {
-        if (vibrator != null) {
-            try {
-                vibrator.cancel();
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
-    private void toggleTone() {
-        toneRunning = !toneRunning;
-        if (toneRunning) {
-            tonePlayer.setDrainMode(drainMode);
-            tonePlayer.setFrequency(toneFrequency);
-            tonePlayer.start();
-            toneButton.setText("정지");
-        } else {
-            tonePlayer.stop();
-            toneButton.setText("시작");
-        }
-        applyButtonStyle(toneButton, toneRunning);
-    }
-
-    private Vibrator getVibrator() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                VibratorManager manager =
-                        (VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
-                return manager == null ? null : manager.getDefaultVibrator();
-            }
-            return (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        } catch (Throwable e) {
-            return null;
-        }
-    }
-
     private void maybeRequestMoistureIntegration() {
-        SharedPreferences prefs = getSharedPreferences(SETUP_PREFS, MODE_PRIVATE);
+        SharedPreferences prefs = getSharedPreferences(
+                SETUP_PREFS,
+                MODE_PRIVATE
+        );
         if (prefs.getBoolean(KEY_MOISTURE_SETUP_ASKED, false)) return;
 
-        prefs.edit().putBoolean(KEY_MOISTURE_SETUP_ASKED, true).apply();
+        prefs.edit().putBoolean(
+                KEY_MOISTURE_SETUP_ASKED,
+                true
+        ).apply();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
@@ -479,10 +612,18 @@ public class MainActivity extends Activity {
 
     private void openNotificationListenerSettings() {
         try {
-            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+            startActivity(
+                    new Intent(
+                            Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
+                    )
+            );
         } catch (Throwable ignored) {
             try {
-                startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
+                startActivity(
+                        new Intent(
+                                "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"
+                        )
+                );
             } catch (Throwable ignoredAgain) {
             }
         }
@@ -494,7 +635,11 @@ public class MainActivity extends Activity {
             String[] permissions,
             int[] grantResults
     ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        super.onRequestPermissionsResult(
+                requestCode,
+                permissions,
+                grantResults
+        );
         if (requestCode == REQUEST_NOTIFICATIONS) {
             getWindow().getDecorView().postDelayed(
                     this::openNotificationListenerSettings,
@@ -503,220 +648,9 @@ public class MainActivity extends Activity {
         }
     }
 
-    @Override
-    protected void onStop() {
-        stopVibration();
-        vibrationRunning = false;
-        if (vibrationButton != null) {
-            vibrationButton.setText("시작");
-            applyButtonStyle(vibrationButton, false);
-        }
-
-        if (tonePlayer != null) tonePlayer.stop();
-        toneRunning = false;
-        if (toneButton != null) {
-            toneButton.setText("시작");
-            applyButtonStyle(toneButton, false);
-        }
-
-        super.onStop();
-    }
-
-    @Override
-    protected void onDestroy() {
-        stopVibration();
-        if (tonePlayer != null) tonePlayer.release();
-        super.onDestroy();
-    }
-
     private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private static final class TonePlayer {
-        private static final int SAMPLE_RATE = 44100;
-        private static final double DRAIN_MIN_HZ = 150.0;
-        private static final double DRAIN_MAX_HZ = 220.0;
-        private static final double DRAIN_SWEEP_SECONDS = 2.4;
-
-        private final AudioManager audioManager;
-
-        private volatile double frequency = 165.0;
-        private volatile boolean drainMode = true;
-        private volatile boolean running = false;
-
-        private AudioTrack track;
-        private Thread thread;
-
-        TonePlayer(Context context) {
-            Context appContext = context.getApplicationContext();
-            this.audioManager =
-                    (AudioManager) appContext.getSystemService(Context.AUDIO_SERVICE);
-        }
-
-        void setFrequency(double frequency) {
-            this.frequency = Math.max(120.0, Math.min(240.0, frequency));
-        }
-
-        void setDrainMode(boolean drainMode) {
-            this.drainMode = drainMode;
-        }
-
-        synchronized void start() {
-            if (running) return;
-            running = true;
-
-            int min = AudioTrack.getMinBufferSize(
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-            );
-            int bufferBytes = Math.max(min, 4096);
-
-            AudioAttributes attributes = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build();
-
-            AudioFormat format = new AudioFormat.Builder()
-                    .setSampleRate(SAMPLE_RATE)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build();
-
-            track = new AudioTrack(
-                    attributes,
-                    format,
-                    bufferBytes,
-                    AudioTrack.MODE_STREAM,
-                    AudioManager.AUDIO_SESSION_ID_GENERATE
-            );
-
-            routeToBuiltInSpeaker(track);
-
-            try {
-                track.play();
-            } catch (Throwable e) {
-                running = false;
-                releaseTrack();
-                return;
-            }
-
-            thread = new Thread(this::audioLoop, "VibeDrain-Audio");
-            thread.start();
-        }
-
-        private void audioLoop() {
-            short[] buffer = new short[1024];
-            double phase = 0.0;
-            long sampleIndex = 0L;
-            final double sweepSamples = SAMPLE_RATE * DRAIN_SWEEP_SECONDS;
-
-            while (running) {
-                boolean drain = drainMode;
-
-                for (int i = 0; i < buffer.length; i++) {
-                    double f;
-
-                    if (drain) {
-                        double cycle = (sampleIndex % (long) (sweepSamples * 2.0))
-                                / sweepSamples;
-                        double triangle = cycle <= 1.0 ? cycle : 2.0 - cycle;
-                        f = DRAIN_MIN_HZ
-                                + (DRAIN_MAX_HZ - DRAIN_MIN_HZ) * triangle;
-                    } else {
-                        f = frequency;
-                    }
-
-                    double step = 2.0 * Math.PI * f / SAMPLE_RATE;
-                    phase += step;
-                    if (phase >= 2.0 * Math.PI) phase -= 2.0 * Math.PI;
-
-                    double sample;
-                    if (drain) {
-                        double raw = Math.sin(phase)
-                                + 0.30 * Math.sin(phase * 3.0);
-                        sample = Math.tanh(raw * 1.55) / Math.tanh(1.55);
-                    } else {
-                        sample = Math.sin(phase);
-                    }
-
-                    sample = Math.max(-1.0, Math.min(1.0, sample));
-                    buffer[i] = (short) Math.round(sample * 32767.0);
-                    sampleIndex++;
-                }
-
-                AudioTrack t = track;
-                if (t == null) break;
-
-                try {
-                    int written = t.write(
-                            buffer,
-                            0,
-                            buffer.length,
-                            AudioTrack.WRITE_BLOCKING
-                    );
-                    if (written < 0) break;
-                } catch (Throwable e) {
-                    break;
-                }
-            }
-        }
-
-        private void routeToBuiltInSpeaker(AudioTrack audioTrack) {
-            try {
-                AudioDeviceInfo[] devices =
-                        audioManager == null
-                                ? new AudioDeviceInfo[0]
-                                : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-
-                for (AudioDeviceInfo device : devices) {
-                    if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
-                        audioTrack.setPreferredDevice(device);
-                        return;
-                    }
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-
-        synchronized void stop() {
-            if (!running && track == null) return;
-            running = false;
-
-            AudioTrack t = track;
-            if (t != null) {
-                try { t.pause(); } catch (Throwable ignored) {}
-                try { t.flush(); } catch (Throwable ignored) {}
-                try { t.stop(); } catch (Throwable ignored) {}
-            }
-
-            Thread current = thread;
-            if (current != null) {
-                try {
-                    current.join(150L);
-                } catch (InterruptedException ignored) {
-                }
-            }
-            thread = null;
-
-            releaseTrack();
-        }
-
-        synchronized void release() {
-            stop();
-        }
-
-        private void releaseTrack() {
-            AudioTrack t = track;
-            track = null;
-
-            if (t != null) {
-                try {
-                    t.release();
-                } catch (Throwable ignored) {
-                }
-            }
-        }
+        return Math.round(
+                value * getResources().getDisplayMetrics().density
+        );
     }
 }

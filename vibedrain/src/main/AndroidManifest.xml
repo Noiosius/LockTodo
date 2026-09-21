@@ -3,6 +3,8 @@
 
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:allowBackup="false"
@@ -11,6 +13,11 @@
         android:roundIcon="@drawable/ic_vibe_drain"
         android:supportsRtl="true"
         android:theme="@style/Theme.VibeDrain">
+
+        <service
+            android:name=".DrainForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <service
             android:name=".MoistureNotificationListener"

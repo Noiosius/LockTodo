@@ -1,7 +1,10 @@
 package com.vibedrain.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -15,6 +18,8 @@ import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
+import android.provider.Settings;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -35,6 +40,10 @@ public class MainActivity extends Activity {
     private TextView vibrationValue;
     private TextView frequencyValue;
     private TextView volumeValue;
+    private TextView moistureStatus;
+    private Button moistureSettingsButton;
+
+    private static final int REQUEST_NOTIFICATIONS = 4201;
 
     private int vibrationStrength = 100;
     private int toneFrequency = 165;
@@ -92,6 +101,13 @@ public class MainActivity extends Activity {
         );
         toneParams.topMargin = dp(14);
         root.addView(buildToneCard(), toneParams);
+
+        LinearLayout.LayoutParams moistureParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        moistureParams.topMargin = dp(14);
+        root.addView(buildMoistureCard(), moistureParams);
 
         TextView note = new TextView(this);
         note.setText("스피커 배수음은 물방울 제거를 보조하는 기능입니다.\n충전단자에 습기 경고가 있으면 완전히 마를 때까지 충전하지 마세요.");
@@ -209,6 +225,115 @@ public class MainActivity extends Activity {
         card.addView(hint);
 
         return card;
+    }
+
+    private View buildMoistureCard() {
+        LinearLayout card = card();
+
+        TextView header = header("수분 알림 연동");
+        card.addView(header);
+
+        moistureStatus = new TextView(this);
+        moistureStatus.setTextColor(Color.rgb(145, 145, 145));
+        moistureStatus.setTextSize(12);
+        moistureStatus.setPadding(0, dp(7), 0, 0);
+        card.addView(moistureStatus);
+
+        moistureSettingsButton = actionButton("알림 접근 허용");
+        moistureSettingsButton.setOnClickListener(v -> beginMoistureSetup());
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        buttonParams.topMargin = dp(12);
+        card.addView(moistureSettingsButton, buttonParams);
+
+        TextView hint = hint("삼성 수분·습기 경고가 뜨면 Vibe Drain을 열 수 있는 알림을 함께 표시");
+        card.addView(hint);
+
+        updateMoistureStatus();
+        return card;
+    }
+
+    private void beginMoistureSetup() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_NOTIFICATIONS
+            );
+            return;
+        }
+        openNotificationListenerSettings();
+    }
+
+    private void openNotificationListenerSettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+        } catch (Throwable ignored) {
+            startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
+        }
+    }
+
+    private boolean isNotificationListenerEnabled() {
+        try {
+            String enabled = Settings.Secure.getString(
+                    getContentResolver(),
+                    "enabled_notification_listeners"
+            );
+            if (TextUtils.isEmpty(enabled)) return false;
+            String packageName = getPackageName();
+            for (String entry : enabled.split(":")) {
+                if (entry.startsWith(packageName + "/")) return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    private boolean canPostNotifications() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void updateMoistureStatus() {
+        if (moistureStatus == null || moistureSettingsButton == null) return;
+
+        boolean listener = isNotificationListenerEnabled();
+        boolean notifications = canPostNotifications();
+
+        if (listener && notifications) {
+            moistureStatus.setText("사용 중 · 수분 경고를 감지하면 바로가기 알림 표시");
+            moistureSettingsButton.setText("연동 설정");
+        } else if (!notifications) {
+            moistureStatus.setText("알림 권한이 필요합니다");
+            moistureSettingsButton.setText("알림 권한 허용");
+        } else {
+            moistureStatus.setText("꺼짐 · 알림 접근 권한을 허용하세요");
+            moistureSettingsButton.setText("알림 접근 허용");
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        updateMoistureStatus();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_NOTIFICATIONS) {
+            updateMoistureStatus();
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                openNotificationListenerSettings();
+            }
+        }
     }
 
     private LinearLayout card() {

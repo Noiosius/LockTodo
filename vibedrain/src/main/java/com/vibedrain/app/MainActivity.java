@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -19,7 +20,6 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
 import android.provider.Settings;
-import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,18 +32,25 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
+    private static final int REQUEST_NOTIFICATIONS = 4201;
+    private static final String SETUP_PREFS = "vibe_drain_setup";
+    private static final String KEY_MOISTURE_SETUP_ASKED = "moisture_setup_asked_v1";
+
     private Vibrator vibrator;
     private TonePlayer tonePlayer;
 
     private Button vibrationButton;
     private Button toneButton;
+    private Button singleModeButton;
+    private Button drainModeButton;
+
     private TextView vibrationValue;
     private TextView frequencyValue;
     private TextView volumeValue;
-    private TextView moistureStatus;
-    private Button moistureSettingsButton;
+    private TextView toneHint;
 
-    private static final int REQUEST_NOTIFICATIONS = 4201;
+    private LinearLayout frequencyRow;
+    private SeekBar frequencySeek;
 
     private int vibrationStrength = 100;
     private int toneFrequency = 165;
@@ -51,6 +58,7 @@ public class MainActivity extends Activity {
 
     private boolean vibrationRunning = false;
     private boolean toneRunning = false;
+    private boolean drainMode = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,6 +73,7 @@ public class MainActivity extends Activity {
         tonePlayer = new TonePlayer(this);
 
         setContentView(buildUi());
+        maybeRequestMoistureIntegration();
     }
 
     private View buildUi() {
@@ -88,29 +97,23 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("진동 · 스피커 배수");
+        subtitle.setText("진동 · 단음 · 배수");
         subtitle.setTextColor(Color.rgb(125, 125, 125));
         subtitle.setTextSize(12);
         subtitle.setPadding(0, dp(3), 0, dp(20));
         root.addView(subtitle);
 
         root.addView(buildVibrationCard());
-        LinearLayout.LayoutParams toneParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        toneParams.topMargin = dp(14);
-        root.addView(buildToneCard(), toneParams);
 
-        LinearLayout.LayoutParams moistureParams = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams speakerParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        moistureParams.topMargin = dp(14);
-        root.addView(buildMoistureCard(), moistureParams);
+        speakerParams.topMargin = dp(14);
+        root.addView(buildSpeakerCard(), speakerParams);
 
         TextView note = new TextView(this);
-        note.setText("스피커 배수음은 물방울 제거를 보조하는 기능입니다.\n충전단자에 습기 경고가 있으면 완전히 마를 때까지 충전하지 마세요.");
+        note.setText("배수 모드는 150–220 Hz를 자동으로 왕복하며 출력합니다.\n충전단자에 습기 경고가 있으면 완전히 마를 때까지 충전하지 마세요.");
         note.setTextColor(Color.rgb(105, 105, 105));
         note.setTextSize(11);
         note.setLineSpacing(0, 1.25f);
@@ -123,8 +126,7 @@ public class MainActivity extends Activity {
     private View buildVibrationCard() {
         LinearLayout card = card();
 
-        TextView header = header("진동");
-        card.addView(header);
+        card.addView(header("진동"));
 
         vibrationButton = actionButton("시작");
         vibrationButton.setOnClickListener(v -> toggleVibration());
@@ -137,7 +139,9 @@ public class MainActivity extends Activity {
         vibrationValue = (TextView) labelRow.getChildAt(1);
         vibrationValue.setText(vibrationStrength + "%");
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
         labelParams.topMargin = dp(18);
         card.addView(labelRow, labelParams);
 
@@ -145,193 +149,150 @@ public class MainActivity extends Activity {
         strength.setMax(99);
         strength.setProgress(vibrationStrength - 1);
         strength.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 vibrationStrength = progress + 1;
                 vibrationValue.setText(vibrationStrength + "%");
                 if (vibrationRunning) startVibration();
             }
+
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
-        card.addView(strength, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
+        card.addView(strength);
 
-        TextView hint = hint("연속 진동 · 슬라이더를 움직이면 즉시 세기가 바뀝니다");
-        card.addView(hint);
+        card.addView(hint("연속 진동 · 세기 1–100%"));
 
         return card;
     }
 
-    private View buildToneCard() {
+    private View buildSpeakerCard() {
         LinearLayout card = card();
 
-        TextView header = header("스피커 배수");
-        card.addView(header);
+        card.addView(header("스피커"));
+
+        LinearLayout modeRow = new LinearLayout(this);
+        modeRow.setOrientation(LinearLayout.HORIZONTAL);
+        modeRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        singleModeButton = modeButton("단음");
+        drainModeButton = modeButton("배수");
+
+        singleModeButton.setOnClickListener(v -> setSpeakerMode(false));
+        drainModeButton.setOnClickListener(v -> setSpeakerMode(true));
+
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(
+                0, dp(44), 1f);
+        left.rightMargin = dp(5);
+        modeRow.addView(singleModeButton, left);
+
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(
+                0, dp(44), 1f);
+        right.leftMargin = dp(5);
+        modeRow.addView(drainModeButton, right);
+
+        LinearLayout.LayoutParams modeParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        modeParams.topMargin = dp(12);
+        card.addView(modeRow, modeParams);
 
         toneButton = actionButton("시작");
         toneButton.setOnClickListener(v -> toggleTone());
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams startParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
-        buttonParams.topMargin = dp(12);
-        card.addView(toneButton, buttonParams);
+        startParams.topMargin = dp(10);
+        card.addView(toneButton, startParams);
 
-        LinearLayout frequencyRow = valueRow("주파수");
+        frequencyRow = valueRow("주파수");
         frequencyValue = (TextView) frequencyRow.getChildAt(1);
         frequencyValue.setText(toneFrequency + " Hz");
-        LinearLayout.LayoutParams row1 = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        row1.topMargin = dp(18);
-        card.addView(frequencyRow, row1);
+        LinearLayout.LayoutParams freqRowParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        freqRowParams.topMargin = dp(16);
+        card.addView(frequencyRow, freqRowParams);
 
-        SeekBar frequency = new SeekBar(this);
-        frequency.setMax(120);
-        frequency.setProgress(toneFrequency - 120);
-        frequency.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+        frequencySeek = new SeekBar(this);
+        frequencySeek.setMax(120);
+        frequencySeek.setProgress(toneFrequency - 120);
+        frequencySeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 toneFrequency = 120 + progress;
                 frequencyValue.setText(toneFrequency + " Hz");
                 tonePlayer.setFrequency(toneFrequency);
             }
+
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
-        card.addView(frequency);
+        card.addView(frequencySeek);
 
         LinearLayout volumeRow = valueRow("출력");
         volumeValue = (TextView) volumeRow.getChildAt(1);
         volumeValue.setText(toneVolume + "%");
-        LinearLayout.LayoutParams row2 = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        row2.topMargin = dp(10);
-        card.addView(volumeRow, row2);
+        LinearLayout.LayoutParams volumeRowParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        volumeRowParams.topMargin = dp(10);
+        card.addView(volumeRow, volumeRowParams);
 
         SeekBar volume = new SeekBar(this);
-        volume.setMax(90);
-        volume.setProgress(toneVolume - 10);
+        volume.setMax(99);
+        volume.setProgress(toneVolume - 1);
         volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                toneVolume = 10 + progress;
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                toneVolume = progress + 1;
                 volumeValue.setText(toneVolume + "%");
                 tonePlayer.setVolume(toneVolume / 100f);
             }
+
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
         card.addView(volume);
 
-        TextView hint = hint("기본 165 Hz · 시작 시 미디어 음량을 최대로 올리고 종료하면 원래 값으로 복원");
-        card.addView(hint);
+        toneHint = hint("");
+        card.addView(toneHint);
 
+        setSpeakerMode(true);
         return card;
     }
 
-    private View buildMoistureCard() {
-        LinearLayout card = card();
-
-        TextView header = header("수분 알림 연동");
-        card.addView(header);
-
-        moistureStatus = new TextView(this);
-        moistureStatus.setTextColor(Color.rgb(145, 145, 145));
-        moistureStatus.setTextSize(12);
-        moistureStatus.setPadding(0, dp(7), 0, 0);
-        card.addView(moistureStatus);
-
-        moistureSettingsButton = actionButton("알림 접근 허용");
-        moistureSettingsButton.setOnClickListener(v -> beginMoistureSetup());
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
-        buttonParams.topMargin = dp(12);
-        card.addView(moistureSettingsButton, buttonParams);
-
-        TextView hint = hint("삼성 수분·습기 경고가 뜨면 Vibe Drain을 열 수 있는 알림을 함께 표시");
-        card.addView(hint);
-
-        updateMoistureStatus();
-        return card;
-    }
-
-    private void beginMoistureSetup() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(
-                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
-                    REQUEST_NOTIFICATIONS
-            );
-            return;
-        }
-        openNotificationListenerSettings();
-    }
-
-    private void openNotificationListenerSettings() {
-        try {
-            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
-        } catch (Throwable ignored) {
-            startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
-        }
-    }
-
-    private boolean isNotificationListenerEnabled() {
-        try {
-            String enabled = Settings.Secure.getString(
-                    getContentResolver(),
-                    "enabled_notification_listeners"
-            );
-            if (TextUtils.isEmpty(enabled)) return false;
-            String packageName = getPackageName();
-            for (String entry : enabled.split(":")) {
-                if (entry.startsWith(packageName + "/")) return true;
+    private void setSpeakerMode(boolean useDrainMode) {
+        if (toneRunning) {
+            tonePlayer.stop();
+            toneRunning = false;
+            if (toneButton != null) {
+                toneButton.setText("시작");
+                applyButtonStyle(toneButton, false);
             }
-        } catch (Throwable ignored) {
         }
-        return false;
-    }
 
-    private boolean canPostNotifications() {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
-                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                == PackageManager.PERMISSION_GRANTED;
-    }
+        drainMode = useDrainMode;
+        tonePlayer.setDrainMode(drainMode);
 
-    private void updateMoistureStatus() {
-        if (moistureStatus == null || moistureSettingsButton == null) return;
-
-        boolean listener = isNotificationListenerEnabled();
-        boolean notifications = canPostNotifications();
-
-        if (listener && notifications) {
-            moistureStatus.setText("사용 중 · 수분 경고를 감지하면 바로가기 알림 표시");
-            moistureSettingsButton.setText("연동 설정");
-        } else if (!notifications) {
-            moistureStatus.setText("알림 권한이 필요합니다");
-            moistureSettingsButton.setText("알림 권한 허용");
-        } else {
-            moistureStatus.setText("꺼짐 · 알림 접근 권한을 허용하세요");
-            moistureSettingsButton.setText("알림 접근 허용");
+        if (singleModeButton != null) {
+            applyModeButtonStyle(singleModeButton, !drainMode);
         }
-    }
+        if (drainModeButton != null) {
+            applyModeButtonStyle(drainModeButton, drainMode);
+        }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        updateMoistureStatus();
-    }
+        int visibility = drainMode ? View.GONE : View.VISIBLE;
+        if (frequencyRow != null) frequencyRow.setVisibility(visibility);
+        if (frequencySeek != null) frequencySeek.setVisibility(visibility);
 
-    @Override
-    public void onRequestPermissionsResult(
-            int requestCode,
-            String[] permissions,
-            int[] grantResults
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_NOTIFICATIONS) {
-            updateMoistureStatus();
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                openNotificationListenerSettings();
+        if (toneHint != null) {
+            if (drainMode) {
+                toneHint.setText("150–220 Hz 자동 스윕 · 강화 파형");
+            } else {
+                toneHint.setText("120–240 Hz 단음 · 주파수 직접 조절");
             }
         }
     }
@@ -363,8 +324,16 @@ public class MainActivity extends Activity {
         button.setAllCaps(false);
         button.setText(text);
         button.setTextSize(15);
-        button.setTextColor(Color.WHITE);
         applyButtonStyle(button, false);
+        return button;
+    }
+
+    private Button modeButton(String text) {
+        Button button = new Button(this);
+        button.setAllCaps(false);
+        button.setText(text);
+        button.setTextSize(14);
+        applyModeButtonStyle(button, false);
         return button;
     }
 
@@ -373,6 +342,17 @@ public class MainActivity extends Activity {
         bg.setColor(active ? Color.rgb(235, 235, 235) : Color.rgb(42, 42, 42));
         bg.setCornerRadius(dp(16));
         button.setTextColor(active ? Color.BLACK : Color.WHITE);
+        button.setBackground(bg);
+    }
+
+    private void applyModeButtonStyle(Button button, boolean selected) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(selected ? Color.rgb(224, 224, 224) : Color.rgb(34, 34, 34));
+        bg.setCornerRadius(dp(14));
+        bg.setStroke(dp(1), selected
+                ? Color.rgb(224, 224, 224)
+                : Color.rgb(58, 58, 58));
+        button.setTextColor(selected ? Color.BLACK : Color.rgb(165, 165, 165));
         button.setBackground(bg);
     }
 
@@ -432,8 +412,6 @@ public class MainActivity extends Activity {
             vibrator.cancel();
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Repeat the complete waveform from index 0. Some Samsung devices are
-                // unreliable when a repeating waveform starts from a non-zero repeat index.
                 int actualAmplitude = vibrator.hasAmplitudeControl()
                         ? amplitude
                         : VibrationEffect.DEFAULT_AMPLITUDE;
@@ -448,7 +426,6 @@ public class MainActivity extends Activity {
                 vibrator.vibrate(new long[]{0L, 1000L}, 0, vibrationAttributes);
             }
         } catch (Throwable ignored) {
-            // Last-resort fallback: request a normal one-shot vibration.
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     vibrator.vibrate(
@@ -470,13 +447,17 @@ public class MainActivity extends Activity {
 
     private void stopVibration() {
         if (vibrator != null) {
-            try { vibrator.cancel(); } catch (Throwable ignored) {}
+            try {
+                vibrator.cancel();
+            } catch (Throwable ignored) {
+            }
         }
     }
 
     private void toggleTone() {
         toneRunning = !toneRunning;
         if (toneRunning) {
+            tonePlayer.setDrainMode(drainMode);
             tonePlayer.setFrequency(toneFrequency);
             tonePlayer.setVolume(toneVolume / 100f);
             tonePlayer.start();
@@ -498,6 +479,53 @@ public class MainActivity extends Activity {
             return (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         } catch (Throwable e) {
             return null;
+        }
+    }
+
+    private void maybeRequestMoistureIntegration() {
+        SharedPreferences prefs = getSharedPreferences(SETUP_PREFS, MODE_PRIVATE);
+        if (prefs.getBoolean(KEY_MOISTURE_SETUP_ASKED, false)) return;
+
+        prefs.edit().putBoolean(KEY_MOISTURE_SETUP_ASKED, true).apply();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_NOTIFICATIONS
+            );
+        } else {
+            getWindow().getDecorView().postDelayed(
+                    this::openNotificationListenerSettings,
+                    350L
+            );
+        }
+    }
+
+    private void openNotificationListenerSettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+        } catch (Throwable ignored) {
+            try {
+                startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
+            } catch (Throwable ignoredAgain) {
+            }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_NOTIFICATIONS) {
+            getWindow().getDecorView().postDelayed(
+                    this::openNotificationListenerSettings,
+                    250L
+            );
         }
     }
 
@@ -533,11 +561,16 @@ public class MainActivity extends Activity {
 
     private static final class TonePlayer {
         private static final int SAMPLE_RATE = 44100;
+        private static final double DRAIN_MIN_HZ = 150.0;
+        private static final double DRAIN_MAX_HZ = 220.0;
+        private static final double DRAIN_SWEEP_SECONDS = 2.4;
 
         private final Context context;
         private final AudioManager audioManager;
+
         private volatile double frequency = 165.0;
         private volatile float volume = 1.0f;
+        private volatile boolean drainMode = true;
         private volatile boolean running = false;
 
         private AudioTrack track;
@@ -556,11 +589,11 @@ public class MainActivity extends Activity {
         }
 
         void setVolume(float volume) {
-            this.volume = Math.max(0.05f, Math.min(1f, volume));
-            AudioTrack t = track;
-            if (t != null) {
-                try { t.setVolume(1f); } catch (Throwable ignored) {}
-            }
+            this.volume = Math.max(0.01f, Math.min(1f, volume));
+        }
+
+        void setDrainMode(boolean drainMode) {
+            this.drainMode = drainMode;
         }
 
         synchronized void start() {
@@ -596,37 +629,72 @@ public class MainActivity extends Activity {
 
             routeToBuiltInSpeaker(track);
 
-            try { track.play(); } catch (Throwable e) {
+            try {
+                track.play();
+            } catch (Throwable e) {
                 running = false;
                 releaseTrack();
                 restoreMediaVolume();
                 return;
             }
 
-            thread = new Thread(this::audioLoop, "VibeDrain-Tone");
+            thread = new Thread(this::audioLoop, "VibeDrain-Audio");
             thread.start();
         }
 
         private void audioLoop() {
             short[] buffer = new short[1024];
             double phase = 0.0;
+            long sampleIndex = 0L;
+            final double sweepSamples = SAMPLE_RATE * DRAIN_SWEEP_SECONDS;
 
             while (running) {
-                double f = frequency;
+                boolean drain = drainMode;
                 float gain = volume;
-                double step = 2.0 * Math.PI * f / SAMPLE_RATE;
 
                 for (int i = 0; i < buffer.length; i++) {
-                    double sample = Math.sin(phase);
-                    buffer[i] = (short) Math.round(sample * 32767.0 * gain);
+                    double f;
+
+                    if (drain) {
+                        double cycle = (sampleIndex % (long) (sweepSamples * 2.0))
+                                / sweepSamples;
+                        double triangle = cycle <= 1.0 ? cycle : 2.0 - cycle;
+                        f = DRAIN_MIN_HZ
+                                + (DRAIN_MAX_HZ - DRAIN_MIN_HZ) * triangle;
+                    } else {
+                        f = frequency;
+                    }
+
+                    double step = 2.0 * Math.PI * f / SAMPLE_RATE;
                     phase += step;
                     if (phase >= 2.0 * Math.PI) phase -= 2.0 * Math.PI;
+
+                    double sample;
+                    if (drain) {
+                        double raw = Math.sin(phase)
+                                + 0.30 * Math.sin(phase * 3.0);
+                        double clipped = Math.tanh(raw * 1.55) / Math.tanh(1.55);
+                        sample = clipped;
+                    } else {
+                        sample = Math.sin(phase);
+                    }
+
+                    sample *= gain;
+                    sample = Math.max(-1.0, Math.min(1.0, sample));
+                    buffer[i] = (short) Math.round(sample * 32767.0);
+                    sampleIndex++;
                 }
 
                 AudioTrack t = track;
                 if (t == null) break;
+
                 try {
-                    int written = t.write(buffer, 0, buffer.length, AudioTrack.WRITE_BLOCKING);
+                    int written = t.write(
+                            buffer,
+                            0,
+                            buffer.length,
+                            AudioTrack.WRITE_BLOCKING
+                    );
                     if (written < 0) break;
                 } catch (Throwable e) {
                     break;
@@ -636,12 +704,11 @@ public class MainActivity extends Activity {
 
         private void routeToBuiltInSpeaker(AudioTrack audioTrack) {
             try {
-                AudioManager manager =
-                        (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-                if (manager == null) return;
-
                 AudioDeviceInfo[] devices =
-                        manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+                        audioManager == null
+                                ? new AudioDeviceInfo[0]
+                                : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+
                 for (AudioDeviceInfo device : devices) {
                     if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
                         audioTrack.setPreferredDevice(device);
@@ -665,7 +732,10 @@ public class MainActivity extends Activity {
 
             Thread current = thread;
             if (current != null) {
-                try { current.join(150); } catch (InterruptedException ignored) {}
+                try {
+                    current.join(150L);
+                } catch (InterruptedException ignored) {
+                }
             }
             thread = null;
 
@@ -680,9 +750,12 @@ public class MainActivity extends Activity {
 
         private void forceMaximumMediaVolume() {
             if (audioManager == null || mediaVolumeForced) return;
+
             try {
-                previousMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                previousMusicVolume =
+                        audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                int max =
+                        audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0);
                 mediaVolumeForced = true;
             } catch (Throwable ignored) {
@@ -693,6 +766,7 @@ public class MainActivity extends Activity {
 
         private void restoreMediaVolume() {
             if (audioManager == null || !mediaVolumeForced) return;
+
             try {
                 if (previousMusicVolume >= 0) {
                     audioManager.setStreamVolume(
@@ -711,8 +785,12 @@ public class MainActivity extends Activity {
         private void releaseTrack() {
             AudioTrack t = track;
             track = null;
+
             if (t != null) {
-                try { t.release(); } catch (Throwable ignored) {}
+                try {
+                    t.release();
+                } catch (Throwable ignored) {
+                }
             }
         }
     }

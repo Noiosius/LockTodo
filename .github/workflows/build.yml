@@ -38,7 +38,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build debug APKs
-        run: gradle --no-daemon :app:assembleDebug :batterycheck:assembleDebug :daycount:assembleDebug :quiethome:assembleDebug :widgetalign:assembleDebug
+        run: gradle --no-daemon :app:assembleDebug :batterycheck:assembleDebug :daycount:assembleDebug :quiethome:assembleDebug :widgetalign:assembleDebug :vibedrain:assembleDebug
 
       - name: Upload LockTodo APK
         uses: actions/upload-artifact@v4
@@ -73,4 +73,11 @@ jobs:
         with:
           name: Widget-Align-v0.2-apk
           path: widgetalign/build/outputs/apk/debug/widgetalign-debug.apk
+          if-no-files-found: error
+
+      - name: Upload Vibe Drain APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vibe-Drain-v0.1-apk
+          path: vibedrain/build/outputs/apk/debug/vibedrain-debug.apk
           if-no-files-found: error

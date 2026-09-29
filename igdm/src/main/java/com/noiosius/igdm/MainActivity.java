@@ -135,15 +135,8 @@ public class MainActivity extends Activity {
                 "(function(){" +
                 "if(window.__igdm_minimal)return;window.__igdm_minimal=true;" +
                 "var style=document.createElement('style');" +
-                "style.textContent='" +
-                "a[href=\\"/\\"]," +
-                "a[href^=\\"/explore\\"]," +
-                "a[href^=\\"/reels\\"]," +
-                "a[href^=\\"/accounts/activity\\"]," +
-                "a[href^=\\"/create\\"]," +
-                "a[href^=\\"/stories\\"]" +
-                "{display:none!important;visibility:hidden!important;}" +
-                "';document.documentElement.appendChild(style);" +
+                "style.textContent=\"a[href='/'],a[href^='/explore'],a[href^='/reels'],a[href^='/accounts/activity'],a[href^='/create'],a[href^='/stories']{display:none!important;visibility:hidden!important;}\";" +
+                "document.documentElement.appendChild(style);" +
                 "var clean=function(){" +
                 "document.querySelectorAll('a[href]').forEach(function(a){" +
                 "try{var p=new URL(a.href,location.origin).pathname;" +

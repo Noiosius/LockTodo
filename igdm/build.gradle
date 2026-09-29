@@ -12,6 +12,12 @@ android {
         targetSdk 35
         versionCode 4
         versionName '0.4.0'
+        manifestPlaceholders = [appLabel: 'IG DM']
+        if (project.hasProperty('igdmCandidate')) {
+            applicationIdSuffix '.candidate'
+            versionNameSuffix '-candidate'
+            manifestPlaceholders = [appLabel: 'IG DM Test']
+        }
     }
 
     buildTypes {

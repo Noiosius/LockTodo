@@ -5,7 +5,7 @@
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_igdm"
-        android:label="IG DM"
+        android:label="${appLabel}"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.IGDM">

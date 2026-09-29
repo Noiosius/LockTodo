@@ -22,6 +22,7 @@ import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.NumberPicker;
 import android.widget.TextView;
@@ -34,12 +35,15 @@ import java.util.Locale;
 
 public class QuickTodoActivity extends Activity {
     public static final String EXTRA_EDIT_INDEX = "edit_index";
+    public static final String EXTRA_REMINDER_ONLY = "reminder_only";
     private static final int REQUEST_NOTIFICATIONS = 4701;
 
     private EditText input;
     private TextView reminderButton;
     private int editIndex = -1;
     private long selectedReminderAt = 0L;
+    private boolean selectedReminderVibrate = false;
+    private boolean reminderOnly = false;
     private long lastOutsideTap = 0L;
     private boolean openPickerAfterPermission = false;
 
@@ -120,6 +124,7 @@ public class QuickTodoActivity extends Activity {
         window.setAttributes(attrs);
 
         editIndex = getIntent().getIntExtra(EXTRA_EDIT_INDEX, -1);
+        reminderOnly = getIntent().getBooleanExtra(EXTRA_REMINDER_ONLY, false);
         if (editIndex >= 0) {
             TodoStore store = new TodoStore(this);
             List<String> items = store.load();
@@ -127,6 +132,7 @@ public class QuickTodoActivity extends Activity {
                 input.setText(items.get(editIndex));
                 input.setSelection(input.length());
                 selectedReminderAt = store.getReminderAt(editIndex);
+                selectedReminderVibrate = store.getReminderVibrate(editIndex);
             } else {
                 editIndex = -1;
             }
@@ -143,11 +149,16 @@ public class QuickTodoActivity extends Activity {
             return false;
         });
 
-        input.requestFocus();
-        input.postDelayed(() -> {
-            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-            if (imm != null) imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
-        }, 80);
+        if (reminderOnly && editIndex >= 0) {
+            input.clearFocus();
+            input.postDelayed(this::openReminderPickerWithPermissionCheck, 120L);
+        } else {
+            input.requestFocus();
+            input.postDelayed(() -> {
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+            }, 80);
+        }
     }
 
     @Override
@@ -222,12 +233,21 @@ public class QuickTodoActivity extends Activity {
         dateLabel.setGravity(Gravity.CENTER_VERTICAL);
         top.addView(dateLabel, new LinearLayout.LayoutParams(0, dp(42), 1f));
 
-        TextView dateSettings = new TextView(this);
-        dateSettings.setText("설정");
-        dateSettings.setTextSize(14);
-        dateSettings.setTextColor(muted);
-        dateSettings.setGravity(Gravity.CENTER);
-        top.addView(dateSettings, new LinearLayout.LayoutParams(dp(54), dp(42)));
+        ImageButton vibrationSettings = new ImageButton(this);
+        vibrationSettings.setImageResource(R.drawable.ic_vibrate_small);
+        vibrationSettings.setColorFilter(fg);
+        vibrationSettings.setBackgroundColor(Color.TRANSPARENT);
+        vibrationSettings.setPadding(dp(9), dp(9), dp(9), dp(9));
+        vibrationSettings.setAlpha(selectedReminderVibrate ? 1f : 0.32f);
+        top.addView(vibrationSettings, new LinearLayout.LayoutParams(dp(42), dp(42)));
+
+        ImageButton dateSettings = new ImageButton(this);
+        dateSettings.setImageResource(R.drawable.ic_calendar_small);
+        dateSettings.setColorFilter(fg);
+        dateSettings.setBackgroundColor(Color.TRANSPARENT);
+        dateSettings.setPadding(dp(9), dp(9), dp(9), dp(9));
+        dateSettings.setAlpha(0.72f);
+        top.addView(dateSettings, new LinearLayout.LayoutParams(dp(42), dp(42)));
         card.addView(top);
 
         LinearLayout wheels = new LinearLayout(this);
@@ -276,6 +296,11 @@ public class QuickTodoActivity extends Activity {
         Runnable updateDateLabel = () -> dateLabel.setText(formatDateLabel(chosen));
         updateDateLabel.run();
 
+        vibrationSettings.setOnClickListener(v -> {
+            selectedReminderVibrate = !selectedReminderVibrate;
+            vibrationSettings.animate().alpha(selectedReminderVibrate ? 1f : 0.32f).setDuration(90L).start();
+        });
+
         dateSettings.setOnClickListener(v -> {
             Calendar today = Calendar.getInstance();
             DatePickerDialog datePicker = new DatePickerDialog(
@@ -297,6 +322,7 @@ public class QuickTodoActivity extends Activity {
         clear.setOnClickListener(v -> {
             if (selectedReminderAt > 0L) {
                 selectedReminderAt = 0L;
+                selectedReminderVibrate = false;
                 updateReminderButton();
                 dialog.dismiss();
             }
@@ -316,6 +342,10 @@ public class QuickTodoActivity extends Activity {
             selectedReminderAt = chosen.getTimeInMillis();
             updateReminderButton();
             dialog.dismiss();
+
+            if (reminderOnly && editIndex >= 0) {
+                saveReminderOnlyAndFinish();
+            }
         });
 
         dialog.setContentView(card);
@@ -379,7 +409,7 @@ public class QuickTodoActivity extends Activity {
         TodoStore store = new TodoStore(this);
 
         if (editIndex >= 0) {
-            store.replaceAt(editIndex, text, selectedReminderAt);
+            store.replaceAt(editIndex, text, selectedReminderAt, selectedReminderVibrate);
             LockTodoWidget.updateAll(this);
             ReminderScheduler.reschedule(this);
             if (selectedReminderAt > 0L) {
@@ -390,7 +420,7 @@ public class QuickTodoActivity extends Activity {
         }
 
         if (text.isEmpty()) return;
-        store.add(text, selectedReminderAt);
+        store.add(text, selectedReminderAt, selectedReminderVibrate);
         LockTodoWidget.updateAll(this);
         ReminderScheduler.reschedule(this);
         if (selectedReminderAt > 0L) {
@@ -398,6 +428,7 @@ public class QuickTodoActivity extends Activity {
         }
 
         selectedReminderAt = 0L;
+        selectedReminderVibrate = false;
         updateReminderButton();
         input.setText("");
         input.requestFocus();
@@ -405,6 +436,21 @@ public class QuickTodoActivity extends Activity {
             InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
             if (inputManager != null) inputManager.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
         });
+    }
+
+    private void saveReminderOnlyAndFinish() {
+        TodoStore store = new TodoStore(this);
+        List<String> items = store.load();
+        if (editIndex < 0 || editIndex >= items.size() || selectedReminderAt <= 0L) {
+            finish();
+            return;
+        }
+
+        store.replaceAt(editIndex, items.get(editIndex), selectedReminderAt, selectedReminderVibrate);
+        LockTodoWidget.updateAll(this);
+        ReminderScheduler.reschedule(this);
+        startActivity(new Intent(this, ReminderPermissionActivity.class));
+        finish();
     }
 
     private int dp(int value) {

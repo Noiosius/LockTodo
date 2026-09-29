@@ -34,6 +34,7 @@ public class LockTodoWidget extends AppWidgetProvider {
     public void onUpdate(Context context, AppWidgetManager manager, int[] appWidgetIds) {
         for (int id : appWidgetIds) updateWidget(context, manager, id);
         if (appWidgetIds.length > 0) manager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.todo_list);
+        ReminderScheduler.reschedule(context);
     }
 
     @Override
@@ -93,6 +94,7 @@ public class LockTodoWidget extends AppWidgetProvider {
                 int delay = prefs.getInt(AppPrefs.KEY_CHECK_DELAY, 300);
                 Thread.sleep(Math.max(0, delay));
                 new TodoStore(app).removeAtIfMatches(index, expectedText);
+                ReminderScheduler.reschedule(app);
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             } finally {

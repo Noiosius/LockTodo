@@ -30,7 +30,17 @@ public class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.BLACK);
+        webView.setOnApplyWindowInsetsListener((v, insets) -> {
+            v.setPadding(
+                    insets.getSystemWindowInsetLeft(),
+                    insets.getSystemWindowInsetTop(),
+                    insets.getSystemWindowInsetRight(),
+                    insets.getSystemWindowInsetBottom()
+            );
+            return insets;
+        });
         setContentView(webView);
+        webView.requestApplyInsets();
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);

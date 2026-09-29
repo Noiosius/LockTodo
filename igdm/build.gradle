@@ -9,9 +9,15 @@ android {
     defaultConfig {
         applicationId 'com.noiosius.igdm'
         minSdk 28
-        targetSdk 34
-        versionCode 3
-        versionName '0.3.0'
+        targetSdk 35
+        versionCode 4
+        versionName '0.4.0'
+        manifestPlaceholders = [appLabel: 'IG DM']
+        if (project.hasProperty('igdmCandidate')) {
+            applicationIdSuffix '.candidate'
+            versionNameSuffix '-candidate'
+            manifestPlaceholders = [appLabel: 'IG DM Test']
+        }
     }
 
     buildTypes {
@@ -19,4 +25,9 @@ android {
             minifyEnabled false
         }
     }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    testImplementation 'junit:junit:4.13.2'
 }

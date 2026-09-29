@@ -1,0 +1,22 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.noiosius.igdm'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.noiosius.igdm'
+        minSdk 28
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}

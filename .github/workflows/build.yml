@@ -38,7 +38,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build debug APKs
-        run: gradle --no-daemon :app:assembleDebug :batterycheck:assembleDebug :daycount:assembleDebug :quiethome:assembleDebug :widgetalign:assembleDebug :vibedrain:assembleDebug
+        run: gradle --no-daemon :app:assembleDebug :batterycheck:assembleDebug :daycount:assembleDebug :quiethome:assembleDebug :widgetalign:assembleDebug :vibedrain:assembleDebug :igdm:assembleDebug
 
       - name: Upload LockTodo APK
         uses: actions/upload-artifact@v4
@@ -80,4 +80,11 @@ jobs:
         with:
           name: Vibe-Drain-v0.7-apk
           path: vibedrain/build/outputs/apk/debug/vibedrain-debug.apk
+          if-no-files-found: error
+
+      - name: Upload IG DM APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: IG-DM-v0.1-apk
+          path: igdm/build/outputs/apk/debug/igdm-debug.apk
           if-no-files-found: error

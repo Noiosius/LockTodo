@@ -145,9 +145,9 @@ public class MainActivity extends Activity {
                 String path = safePath(Uri.parse(url));
                 if ("/".equals(path)) {
                     storyReady = false;
-                    if (mode == MODE_STORY) storyWebView.setVisibility(View.INVISIBLE);
-                } else if (isStoryPath(path) && mode == MODE_STORY) {
-                    storyWebView.setVisibility(View.VISIBLE);
+                } else if (isStoryPath(path)) {
+                    expandStoryWebView();
+                    if (mode == MODE_STORY) storyWebView.setVisibility(View.VISIBLE);
                 }
             }
 
@@ -362,11 +362,12 @@ public class MainActivity extends Activity {
         }
 
         if ("/".equals(path)) {
-            prepareDedicatedStoryPage(view, 0);
+            prepareStoryCrop(view, 0);
             return;
         }
 
         if (isStoryPath(path)) {
+            expandStoryWebView();
             injectHideInstagramBottomNav(view);
             if (mode == MODE_STORY) showStoryLayer();
             return;
@@ -375,60 +376,85 @@ public class MainActivity extends Activity {
         view.loadUrl(HOME_URL);
     }
 
-    private void prepareDedicatedStoryPage(WebView view, int attempt) {
+    private void prepareStoryCrop(WebView view, int attempt) {
         String script =
                 "(function(){" +
-                "if(document.getElementById('igdm-story-page'))return true;" +
-                "var raw=[].slice.call(document.querySelectorAll(\"a[href*='/stories/']\")).filter(function(a){" +
-                "var r=a.getBoundingClientRect();" +
-                "return r.width>0&&r.height>0&&r.top<430;" +
+                "var cut=0;" +
+                "var articles=[].slice.call(document.querySelectorAll('article')).filter(function(a){" +
+                "var r=a.getBoundingClientRect();return r.width>0&&r.height>0&&r.top>80;" +
                 "});" +
-                "var seen={};var links=[];" +
-                "raw.forEach(function(a){" +
-                "var href=a.href;" +
-                "if(href&&!seen[href]){seen[href]=1;links.push(a);}" +
+                "if(articles.length){" +
+                "articles.sort(function(a,b){return a.getBoundingClientRect().top-b.getBoundingClientRect().top;});" +
+                "cut=articles[0].getBoundingClientRect().top;" +
+                "}" +
+                "if(!cut||cut<120){" +
+                "var candidates=[].slice.call(document.querySelectorAll(\"a[href*='/stories/'],button,[role='button']\")).filter(function(e){" +
+                "var r=e.getBoundingClientRect();" +
+                "return r.width>38&&r.height>38&&r.top>45&&r.top<360;" +
                 "});" +
-                "if(!links.length)return false;" +
-                "var page=document.createElement('div');page.id='igdm-story-page';" +
-                "page.style.cssText='position:fixed;inset:0;background:#080a0f;z-index:2147483647;overflow:hidden;';" +
-                "var row=document.createElement('div');" +
-                "row.style.cssText='display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;padding:18px 14px 22px 14px;align-items:flex-start;-webkit-overflow-scrolling:touch;';" +
-                "links.forEach(function(a){" +
-                "var clone=a.cloneNode(true);" +
-                "clone.style.setProperty('display','block','important');" +
-                "clone.style.setProperty('flex','0 0 auto','important');" +
-                "clone.style.setProperty('min-width','74px','important');" +
-                "clone.style.setProperty('max-width','92px','important');" +
-                "clone.style.setProperty('text-decoration','none','important');" +
-                "clone.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation();location.assign(a.href);},true);" +
-                "row.appendChild(clone);" +
-                "});" +
-                "page.appendChild(row);" +
-                "document.body.appendChild(page);" +
-                "var keep=function(){" +
-                "[].slice.call(document.body.children).forEach(function(n){if(n!==page)n.style.setProperty('display','none','important');});" +
-                "page.style.setProperty('display','block','important');" +
-                "};keep();" +
-                "new MutationObserver(keep).observe(document.body,{childList:true});" +
-                "document.documentElement.style.setProperty('background','#080a0f','important');" +
-                "document.body.style.setProperty('background','#080a0f','important');" +
-                "document.documentElement.style.setProperty('overflow','hidden','important');" +
-                "document.body.style.setProperty('overflow','hidden','important');" +
-                "return true;" +
+                "var max=0;candidates.forEach(function(e){var r=e.getBoundingClientRect();max=Math.max(max,r.bottom);});" +
+                "if(max>100)cut=max+14;" +
+                "}" +
+                "if(!cut||cut<120)cut=240;" +
+                "document.querySelectorAll('article').forEach(function(a){a.style.setProperty('visibility','hidden','important');});" +
+                "document.documentElement.style.setProperty('overflow-y','hidden','important');" +
+                "document.body.style.setProperty('overflow-y','hidden','important');" +
+                "return [Math.round(cut),Math.round(innerWidth)];" +
                 "})();";
 
         view.evaluateJavascript(script, value -> {
-            if ("true".equals(value)) {
+            try {
+                JSONArray data = new JSONArray(value);
+                double cssCut = data.getDouble(0);
+                double cssWidth = Math.max(1.0, data.getDouble(1));
+
+                int webWidth = storyWebView.getWidth();
+                if (webWidth <= 0) webWidth = getResources().getDisplayMetrics().widthPixels;
+
+                int cropHeight = (int) Math.round(cssCut * webWidth / cssWidth);
+                cropHeight = Math.max(dp(150), Math.min(dp(310), cropHeight));
+
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        cropHeight
+                );
+                params.gravity = Gravity.TOP;
+                storyWebView.setLayoutParams(params);
+                storyWebView.scrollTo(0, 0);
+                storyWebView.setVerticalScrollBarEnabled(false);
+
+                injectHideInstagramBottomNav(view);
+
                 storyReady = true;
                 if (mode == MODE_STORY || storySelectedWaiting) showStoryLayer();
-            } else if (attempt < 60) {
-                handler.postDelayed(() -> prepareDedicatedStoryPage(view, attempt + 1), 70L);
-            } else {
-                // 실패 시 홈을 노출하지 않고 재시도할 수 있도록 백그라운드 상태 유지
-                storyReady = false;
-                handler.postDelayed(() -> storyWebView.reload(), 800L);
+            } catch (Exception error) {
+                if (attempt < 30) {
+                    handler.postDelayed(() -> prepareStoryCrop(view, attempt + 1), 100L);
+                } else {
+                    // 끝까지 측정이 안 되면 홈 상단만 고정 높이로 보여준다.
+                    FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            dp(230)
+                    );
+                    params.gravity = Gravity.TOP;
+                    storyWebView.setLayoutParams(params);
+                    storyWebView.scrollTo(0, 0);
+                    injectHideInstagramBottomNav(view);
+                    storyReady = true;
+                    if (mode == MODE_STORY || storySelectedWaiting) showStoryLayer();
+                }
             }
         });
+    }
+
+    private void expandStoryWebView() {
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        );
+        params.gravity = Gravity.TOP;
+        storyWebView.setLayoutParams(params);
+        storyWebView.setVerticalScrollBarEnabled(false);
     }
 
     private void resolveOwnProfile(WebView view, int generation, int attempt) {

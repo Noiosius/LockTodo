@@ -51,6 +51,12 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.LockTodo.Dialog" />
 
+        <activity
+            android:name=".ReminderPermissionActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/Theme.LockTodo.Dialog" />
+
         <service
             android:name=".TodoRemoteViewsService"
             android:exported="false"

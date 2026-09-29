@@ -16,6 +16,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 
@@ -31,7 +32,10 @@ public class MainActivity extends Activity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    private WebView webView;
+    private WebView mainWebView;
+    private WebView storyWebView;
+    private FrameLayout webContainer;
+
     private ImageButton dmButton;
     private ImageButton storyButton;
     private ImageButton profileButton;
@@ -39,6 +43,8 @@ public class MainActivity extends Activity {
     private int mode = MODE_DM;
     private boolean profileBootstrap = false;
     private int navigationGeneration = 0;
+    private boolean storyReady = false;
+    private boolean storySelectedWaiting = false;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -57,10 +63,27 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.BLACK);
 
-        webView = new WebView(this);
-        webView.setBackgroundColor(Color.BLACK);
-        webView.setAlpha(0f);
-        root.addView(webView, new LinearLayout.LayoutParams(
+        webContainer = new FrameLayout(this);
+        webContainer.setBackgroundColor(Color.BLACK);
+
+        mainWebView = new WebView(this);
+        mainWebView.setBackgroundColor(Color.BLACK);
+        mainWebView.setAlpha(0f);
+
+        storyWebView = new WebView(this);
+        storyWebView.setBackgroundColor(Color.BLACK);
+        storyWebView.setVisibility(View.INVISIBLE);
+
+        webContainer.addView(mainWebView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+        webContainer.addView(storyWebView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
+        root.addView(webContainer, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
                 1f
@@ -86,11 +109,84 @@ public class MainActivity extends Activity {
 
         setContentView(root);
 
+        configureWebView(mainWebView);
+        configureWebView(storyWebView);
+
+        mainWebView.setWebChromeClient(new WebChromeClient());
+        mainWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                mainWebView.setAlpha(0f);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return handleMainNavigation(view, request.getUrl());
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return handleMainNavigation(view, Uri.parse(url));
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                handleMainFinished(view, Uri.parse(url));
+            }
+        });
+
+        storyWebView.setWebChromeClient(new WebChromeClient());
+        storyWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                String path = safePath(Uri.parse(url));
+                if ("/".equals(path)) {
+                    storyReady = false;
+                    if (mode == MODE_STORY) storyWebView.setVisibility(View.INVISIBLE);
+                } else if (isStoryPath(path) && mode == MODE_STORY) {
+                    storyWebView.setVisibility(View.VISIBLE);
+                }
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return handleStoryNavigation(view, request.getUrl());
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return handleStoryNavigation(view, Uri.parse(url));
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                handleStoryFinished(view, Uri.parse(url));
+            }
+        });
+
+        dmButton.setOnClickListener(v -> openDm());
+        storyButton.setOnClickListener(v -> openStories());
+        profileButton.setOnClickListener(v -> openProfile());
+
+        mode = MODE_DM;
+        updateNavState();
+        mainWebView.loadUrl(DIRECT_URL);
+
+        // STORY는 사용자가 누르기 전에 백그라운드에서 미리 준비한다.
+        storyWebView.loadUrl(HOME_URL);
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void configureWebView(WebView view) {
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
-        cookies.setAcceptThirdPartyCookies(webView, true);
+        cookies.setAcceptThirdPartyCookies(view, true);
 
-        WebSettings settings = webView.getSettings();
+        WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
@@ -101,46 +197,6 @@ public class MainActivity extends Activity {
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
-
-        webView.setWebChromeClient(new WebChromeClient());
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
-                super.onPageStarted(view, url, favicon);
-                hideContent();
-            }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return handleNavigation(view, request.getUrl());
-            }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return handleNavigation(view, Uri.parse(url));
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                handleFinishedPage(view, Uri.parse(url));
-            }
-        });
-
-        dmButton.setOnClickListener(v -> openDm());
-        storyButton.setOnClickListener(v -> openStories());
-        profileButton.setOnClickListener(v -> openProfile());
-
-        if (savedInstanceState == null) {
-            openDm();
-        } else {
-            mode = savedInstanceState.getInt("mode", MODE_DM);
-            profileBootstrap = savedInstanceState.getBoolean("profileBootstrap", false);
-            updateNavState();
-            if (webView.restoreState(savedInstanceState) == null) {
-                openDm();
-            }
-        }
     }
 
     private ImageButton makeNavButton(int drawable) {
@@ -158,11 +214,13 @@ public class MainActivity extends Activity {
 
     private void openDm() {
         navigationGeneration++;
+        storySelectedWaiting = false;
         mode = MODE_DM;
         profileBootstrap = false;
         updateNavState();
-        hideContent();
-        webView.loadUrl(DIRECT_URL);
+        showMainLayer();
+        mainWebView.setAlpha(0f);
+        mainWebView.loadUrl(DIRECT_URL);
     }
 
     private void openStories() {
@@ -170,25 +228,42 @@ public class MainActivity extends Activity {
         mode = MODE_STORY;
         profileBootstrap = false;
         updateNavState();
-        hideContent();
-        webView.loadUrl(HOME_URL);
+
+        if (storyReady || isStoryPath(safePath(Uri.parse(storyWebView.getUrl() == null ? HOME_URL : storyWebView.getUrl())))) {
+            showStoryLayer();
+        } else {
+            // 준비 전이면 기존 화면을 그대로 두고, 준비되는 순간 바로 전환한다.
+            storySelectedWaiting = true;
+        }
     }
 
     private void openProfile() {
         navigationGeneration++;
+        storySelectedWaiting = false;
         mode = MODE_PROFILE;
         profileBootstrap = true;
         updateNavState();
-        hideContent();
-        webView.loadUrl(HOME_URL);
+        showMainLayer();
+        mainWebView.setAlpha(0f);
+        mainWebView.loadUrl(HOME_URL);
     }
 
-    private void hideContent() {
-        if (webView != null) webView.setAlpha(0f);
+    private void showMainLayer() {
+        storyWebView.setVisibility(View.INVISIBLE);
+        mainWebView.setVisibility(View.VISIBLE);
     }
 
-    private void showContent() {
-        if (webView != null) webView.animate().alpha(1f).setDuration(90L).start();
+    private void showStoryLayer() {
+        storySelectedWaiting = false;
+        mainWebView.setVisibility(View.INVISIBLE);
+        storyWebView.setVisibility(View.VISIBLE);
+    }
+
+    private void showMainContent() {
+        if (mode == MODE_DM || mode == MODE_PROFILE) {
+            mainWebView.setVisibility(View.VISIBLE);
+            mainWebView.animate().alpha(1f).setDuration(80L).start();
+        }
     }
 
     private void updateNavState() {
@@ -197,98 +272,55 @@ public class MainActivity extends Activity {
         profileButton.setAlpha(mode == MODE_PROFILE ? 1f : 0.42f);
     }
 
-    private boolean handleNavigation(WebView view, Uri uri) {
+    private boolean handleMainNavigation(WebView view, Uri uri) {
         if (uri == null) return true;
-
         String scheme = uri.getScheme();
-        String host = uri.getHost();
         String path = safePath(uri);
 
-        if ("about".equals(scheme) || "data".equals(scheme) || "blob".equals(scheme)) {
-            return false;
-        }
-
-        if (!"http".equals(scheme) && !"https".equals(scheme)) {
-            return true;
-        }
-
-        if (!isInstagramHost(host)) {
-            return true;
-        }
-
-        if (isAuthPath(path)) {
-            return false;
-        }
+        if ("about".equals(scheme) || "data".equals(scheme) || "blob".equals(scheme)) return false;
+        if (!"http".equals(scheme) && !"https".equals(scheme)) return true;
+        if (!isInstagramHost(uri.getHost())) return true;
+        if (isAuthPath(path)) return false;
 
         if (mode == MODE_DM) {
-            if (isDirectPath(path) || isSingleReelPath(path)) {
-                return false;
-            }
-            hideContent();
+            if (isDirectPath(path) || isSingleReelPath(path)) return false;
+            mainWebView.setAlpha(0f);
             view.loadUrl(DIRECT_URL);
             return true;
         }
 
-        if (mode == MODE_STORY) {
-            if ("/".equals(path) || isStoryPath(path)) {
-                return false;
-            }
-            hideContent();
-            view.loadUrl(HOME_URL);
-            return true;
-        }
-
         if (mode == MODE_PROFILE) {
-            if (profileBootstrap && "/".equals(path)) {
-                return false;
-            }
+            if (profileBootstrap && "/".equals(path)) return false;
             if (isLikelyProfilePath(path)) {
                 profileBootstrap = false;
                 return false;
             }
-            if ("/".equals(path)) {
-                return false;
-            }
+            if ("/".equals(path)) return false;
             return false;
         }
 
         return false;
     }
 
-    private void handleFinishedPage(WebView view, Uri uri) {
+    private void handleMainFinished(WebView view, Uri uri) {
         if (!isInstagramHost(uri.getHost())) return;
-
         String path = safePath(uri);
 
         if (isAuthPath(path)) {
-            showContent();
+            showMainContent();
             return;
         }
 
         if (mode == MODE_DM) {
             if (isDirectPath(path)) {
                 injectHideInstagramBottomNav(view);
-                handler.postDelayed(this::showContent, 80L);
+                handler.postDelayed(this::showMainContent, 60L);
             } else if (isSingleReelPath(path)) {
                 injectSingleReelLock(view);
-                handler.postDelayed(this::showContent, 80L);
+                handler.postDelayed(this::showMainContent, 60L);
             } else {
-                hideContent();
+                mainWebView.setAlpha(0f);
                 view.loadUrl(DIRECT_URL);
-            }
-            return;
-        }
-
-        if (mode == MODE_STORY) {
-            if ("/".equals(path)) {
-                int generation = navigationGeneration;
-                prepareStoryOnly(view, generation, 0);
-            } else if (isStoryPath(path)) {
-                injectHideInstagramBottomNav(view);
-                handler.postDelayed(this::showContent, 80L);
-            } else {
-                hideContent();
-                view.loadUrl(HOME_URL);
             }
             return;
         }
@@ -299,61 +331,102 @@ public class MainActivity extends Activity {
                 resolveOwnProfile(view, generation, 0);
             } else {
                 injectHideInstagramBottomNav(view);
-                handler.postDelayed(this::showContent, 80L);
+                handler.postDelayed(this::showMainContent, 60L);
             }
         }
     }
 
-    private void prepareStoryOnly(WebView view, int generation, int attempt) {
-        if (generation != navigationGeneration || mode != MODE_STORY) return;
+    private boolean handleStoryNavigation(WebView view, Uri uri) {
+        if (uri == null) return true;
+        String scheme = uri.getScheme();
+        String path = safePath(uri);
 
+        if ("about".equals(scheme) || "data".equals(scheme) || "blob".equals(scheme)) return false;
+        if (!"http".equals(scheme) && !"https".equals(scheme)) return true;
+        if (!isInstagramHost(uri.getHost())) return true;
+        if (isAuthPath(path)) return false;
+
+        if ("/".equals(path) || isStoryPath(path)) return false;
+
+        view.loadUrl(HOME_URL);
+        return true;
+    }
+
+    private void handleStoryFinished(WebView view, Uri uri) {
+        if (!isInstagramHost(uri.getHost())) return;
+        String path = safePath(uri);
+
+        if (isAuthPath(path)) {
+            if (mode == MODE_STORY) showStoryLayer();
+            return;
+        }
+
+        if ("/".equals(path)) {
+            prepareDedicatedStoryPage(view, 0);
+            return;
+        }
+
+        if (isStoryPath(path)) {
+            injectHideInstagramBottomNav(view);
+            if (mode == MODE_STORY) showStoryLayer();
+            return;
+        }
+
+        view.loadUrl(HOME_URL);
+    }
+
+    private void prepareDedicatedStoryPage(WebView view, int attempt) {
         String script =
                 "(function(){" +
-                "var links=[].slice.call(document.querySelectorAll(\"a[href*='/stories/']\")).filter(function(a){" +
+                "if(document.getElementById('igdm-story-page'))return true;" +
+                "var raw=[].slice.call(document.querySelectorAll(\"a[href*='/stories/']\")).filter(function(a){" +
                 "var r=a.getBoundingClientRect();" +
-                "return r.width>0&&r.height>0&&r.top<420;" +
+                "return r.width>0&&r.height>0&&r.top<430;" +
+                "});" +
+                "var seen={};var links=[];" +
+                "raw.forEach(function(a){" +
+                "var href=a.href;" +
+                "if(href&&!seen[href]){seen[href]=1;links.push(a);}" +
                 "});" +
                 "if(!links.length)return false;" +
-                "var root=links[0];" +
-                "while(root.parentElement&&root.parentElement!==document.body){" +
-                "var p=root.parentElement;" +
-                "var count=p.querySelectorAll(\"a[href*='/stories/']\").length;" +
-                "var r=p.getBoundingClientRect();" +
-                "if(count>=Math.min(2,links.length)&&r.height<390&&r.width>innerWidth*0.55)root=p;" +
-                "else break;" +
-                "}" +
-                "var node=root;" +
-                "while(node&&node.parentElement){" +
-                "var parent=node.parentElement;" +
-                "[].slice.call(parent.children).forEach(function(sib){" +
-                "if(sib!==node)sib.style.setProperty('display','none','important');" +
-                "});" +
-                "if(parent===document.body)break;" +
-                "node=parent;" +
-                "}" +
-                "document.documentElement.style.setProperty('background','#000','important');" +
-                "document.body.style.setProperty('background','#000','important');" +
-                "root.style.setProperty('display','block','important');" +
+                "var page=document.createElement('div');page.id='igdm-story-page';" +
+                "page.style.cssText='position:fixed;inset:0;background:#080a0f;z-index:2147483647;overflow:hidden;';" +
+                "var row=document.createElement('div');" +
+                "row.style.cssText='display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;padding:18px 14px 22px 14px;align-items:flex-start;-webkit-overflow-scrolling:touch;';" +
                 "links.forEach(function(a){" +
-                "if(a.dataset.igdmStoryDirect)return;" +
-                "a.dataset.igdmStoryDirect='1';" +
-                "a.addEventListener('click',function(e){" +
-                "e.preventDefault();e.stopImmediatePropagation();location.assign(a.href);" +
-                "},true);" +
+                "var clone=a.cloneNode(true);" +
+                "clone.style.setProperty('display','block','important');" +
+                "clone.style.setProperty('flex','0 0 auto','important');" +
+                "clone.style.setProperty('min-width','74px','important');" +
+                "clone.style.setProperty('max-width','92px','important');" +
+                "clone.style.setProperty('text-decoration','none','important');" +
+                "clone.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation();location.assign(a.href);},true);" +
+                "row.appendChild(clone);" +
                 "});" +
+                "page.appendChild(row);" +
+                "document.body.appendChild(page);" +
+                "var keep=function(){" +
+                "[].slice.call(document.body.children).forEach(function(n){if(n!==page)n.style.setProperty('display','none','important');});" +
+                "page.style.setProperty('display','block','important');" +
+                "};keep();" +
+                "new MutationObserver(keep).observe(document.body,{childList:true});" +
+                "document.documentElement.style.setProperty('background','#080a0f','important');" +
+                "document.body.style.setProperty('background','#080a0f','important');" +
+                "document.documentElement.style.setProperty('overflow','hidden','important');" +
+                "document.body.style.setProperty('overflow','hidden','important');" +
                 "return true;" +
                 "})();";
 
         view.evaluateJavascript(script, value -> {
-            if (generation != navigationGeneration || mode != MODE_STORY) return;
-
             if ("true".equals(value)) {
-                injectHideInstagramBottomNav(view);
-                handler.postDelayed(this::showContent, 80L);
-            } else if (attempt < 35) {
-                handler.postDelayed(() -> prepareStoryOnly(view, generation, attempt + 1), 140L);
+                storyReady = true;
+                if (mode == MODE_STORY || storySelectedWaiting) showStoryLayer();
+            } else if (attempt < 60) {
+                handler.postDelayed(() -> prepareDedicatedStoryPage(view, attempt + 1), 70L);
             } else {
-                showContent();
+                // 실패 시 홈을 노출하지 않고 재시도할 수 있도록 백그라운드 상태 유지
+                storyReady = false;
+                handler.postDelayed(() -> storyWebView.reload(), 800L);
             }
         });
     }
@@ -381,16 +454,15 @@ public class MainActivity extends Activity {
 
         view.evaluateJavascript(script, value -> {
             if (generation != navigationGeneration || mode != MODE_PROFILE) return;
-
             String profileUrl = decodeJsString(value);
             if (profileUrl != null && !profileUrl.isEmpty()) {
                 profileBootstrap = false;
-                hideContent();
-                webView.loadUrl(profileUrl);
+                mainWebView.setAlpha(0f);
+                mainWebView.loadUrl(profileUrl);
             } else if (attempt < 35) {
-                handler.postDelayed(() -> resolveOwnProfile(view, generation, attempt + 1), 140L);
+                handler.postDelayed(() -> resolveOwnProfile(view, generation, attempt + 1), 100L);
             } else {
-                showContent();
+                showMainContent();
             }
         });
     }
@@ -423,8 +495,7 @@ public class MainActivity extends Activity {
                 "if(links.length>=3)e.style.setProperty('display','none','important');" +
                 "}catch(x){}" +
                 "});" +
-                "};" +
-                "hide();" +
+                "};hide();" +
                 "new MutationObserver(hide).observe(document.documentElement,{childList:true,subtree:true});" +
                 "})();";
         view.evaluateJavascript(script, null);
@@ -492,18 +563,20 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        outState.putInt("mode", mode);
-        outState.putBoolean("profileBootstrap", profileBootstrap);
-        if (webView != null) webView.saveState(outState);
-        super.onSaveInstanceState(outState);
-    }
-
-    @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            hideContent();
-            webView.goBack();
+        if (mode == MODE_STORY) {
+            String path = safePath(Uri.parse(storyWebView.getUrl() == null ? HOME_URL : storyWebView.getUrl()));
+            if (isStoryPath(path) && storyWebView.canGoBack()) {
+                storyWebView.goBack();
+            } else {
+                openDm();
+            }
+            return;
+        }
+
+        if (mainWebView != null && mainWebView.canGoBack()) {
+            mainWebView.setAlpha(0f);
+            mainWebView.goBack();
         } else if (mode != MODE_DM) {
             openDm();
         } else {
@@ -514,13 +587,23 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
-        if (webView != null) {
-            webView.stopLoading();
-            webView.setWebChromeClient(null);
-            webView.setWebViewClient(null);
-            webView.destroy();
-            webView = null;
+
+        if (mainWebView != null) {
+            mainWebView.stopLoading();
+            mainWebView.setWebChromeClient(null);
+            mainWebView.setWebViewClient(null);
+            mainWebView.destroy();
+            mainWebView = null;
         }
+
+        if (storyWebView != null) {
+            storyWebView.stopLoading();
+            storyWebView.setWebChromeClient(null);
+            storyWebView.setWebViewClient(null);
+            storyWebView.destroy();
+            storyWebView = null;
+        }
+
         super.onDestroy();
     }
 

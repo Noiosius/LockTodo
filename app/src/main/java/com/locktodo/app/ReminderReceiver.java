@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
+import android.media.AudioAttributes;
 import android.os.Build;
 import android.os.PowerManager;
 import android.os.VibrationEffect;
@@ -98,7 +99,8 @@ public class ReminderReceiver extends BroadcastReceiver {
         try {
             Vibrator vibrator;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                VibratorManager manager = (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                VibratorManager manager =
+                        (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
                 vibrator = manager == null ? null : manager.getDefaultVibrator();
             } else {
                 vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
@@ -106,13 +108,32 @@ public class ReminderReceiver extends BroadcastReceiver {
 
             if (vibrator == null || !vibrator.hasVibrator()) return;
 
-            long[] pattern = new long[]{0L, 180L, 100L, 220L};
+            AudioAttributes attributes =
+                    new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build();
+
+            vibrator.cancel();
+
+            long[] timings = new long[]{0L, 220L, 110L, 260L};
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                int amplitude = vibrator.hasAmplitudeControl()
+                        ? 255
+                        : VibrationEffect.DEFAULT_AMPLITUDE;
+
+                VibrationEffect effect =
+                        VibrationEffect.createWaveform(
+                                timings,
+                                new int[]{0, amplitude, 0, amplitude},
+                                -1
+                        );
+                vibrator.vibrate(effect, attributes);
             } else {
-                vibrator.vibrate(pattern, -1);
+                vibrator.vibrate(timings, -1, attributes);
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
     }
 

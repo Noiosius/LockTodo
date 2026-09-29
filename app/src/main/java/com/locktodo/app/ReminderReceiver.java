@@ -12,12 +12,16 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.provider.Settings;
 
 import java.util.List;
 
 public class ReminderReceiver extends BroadcastReceiver {
     static final String EXTRA_REMINDER_TEXT = "reminder_text";
+    static final String EXTRA_ITEM_INDEX = "reminder_item_index";
     static final int NOTIFICATION_ID = 9302;
     private static final String CHANNEL_ID = "locktodo_reminders";
 
@@ -50,13 +54,20 @@ public class ReminderReceiver extends BroadcastReceiver {
         }
 
         String text = items.get(dueIndex);
+        boolean vibrate = store.getReminderVibrate(dueIndex);
+
         store.clearReminderAtIfMatches(dueIndex, dueAt);
         LockTodoWidget.updateAll(context);
         ReminderScheduler.reschedule(context);
-        showReminder(context, text);
+
+        if (vibrate) {
+            vibrateReminder(context);
+        }
+
+        showReminder(context, text, dueIndex);
     }
 
-    private void showReminder(Context context, String text) {
+    private void showReminder(Context context, String text, int itemIndex) {
         PowerManager power = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         KeyguardManager keyguard = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
 
@@ -68,6 +79,7 @@ public class ReminderReceiver extends BroadcastReceiver {
         if (interactive && !locked && Settings.canDrawOverlays(context)) {
             Intent overlay = new Intent(context, ReminderOverlayService.class);
             overlay.putExtra(ReminderOverlayService.EXTRA_TEXT, text);
+            overlay.putExtra(ReminderOverlayService.EXTRA_ITEM_INDEX, itemIndex);
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(overlay);
@@ -79,7 +91,29 @@ public class ReminderReceiver extends BroadcastReceiver {
             }
         }
 
-        showFullScreenReminder(context, text);
+        showFullScreenReminder(context, text, itemIndex);
+    }
+
+    private void vibrateReminder(Context context) {
+        try {
+            Vibrator vibrator;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                VibratorManager manager = (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                vibrator = manager == null ? null : manager.getDefaultVibrator();
+            } else {
+                vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            }
+
+            if (vibrator == null || !vibrator.hasVibrator()) return;
+
+            long[] pattern = new long[]{0L, 180L, 100L, 220L};
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+            } else {
+                vibrator.vibrate(pattern, -1);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     @SuppressWarnings("deprecation")
@@ -99,7 +133,7 @@ public class ReminderReceiver extends BroadcastReceiver {
         }
     }
 
-    private void showFullScreenReminder(Context context, String text) {
+    private void showFullScreenReminder(Context context, String text, int itemIndex) {
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
 
@@ -118,6 +152,7 @@ public class ReminderReceiver extends BroadcastReceiver {
 
         Intent popup = new Intent(context, ReminderPopupActivity.class);
         popup.putExtra(EXTRA_REMINDER_TEXT, text);
+        popup.putExtra(EXTRA_ITEM_INDEX, itemIndex);
         popup.setData(Uri.parse("locktodo://reminder/" + System.currentTimeMillis()));
         popup.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
 

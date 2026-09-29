@@ -27,20 +27,13 @@ public class MainActivity extends Activity {
         window.setStatusBarColor(Color.BLACK);
         window.setNavigationBarColor(Color.BLACK);
         window.getDecorView().setSystemUiVisibility(0);
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(true);
+        }
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.BLACK);
-        webView.setOnApplyWindowInsetsListener((v, insets) -> {
-            v.setPadding(
-                    insets.getSystemWindowInsetLeft(),
-                    insets.getSystemWindowInsetTop(),
-                    insets.getSystemWindowInsetRight(),
-                    insets.getSystemWindowInsetBottom()
-            );
-            return insets;
-        });
         setContentView(webView);
-        webView.requestApplyInsets();
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);

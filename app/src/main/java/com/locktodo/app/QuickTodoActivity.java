@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.DatePickerDialog;
 import android.app.Dialog;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -381,8 +382,8 @@ public class QuickTodoActivity extends Activity {
             store.replaceAt(editIndex, text, selectedReminderAt);
             LockTodoWidget.updateAll(this);
             ReminderScheduler.reschedule(this);
-            if (selectedReminderAt > 0L && !ReminderScheduler.canScheduleExact(this)) {
-                ReminderScheduler.requestExactAlarmPermission(this);
+            if (selectedReminderAt > 0L) {
+                startActivity(new Intent(this, ReminderPermissionActivity.class));
             }
             finish();
             return;
@@ -392,8 +393,8 @@ public class QuickTodoActivity extends Activity {
         store.add(text, selectedReminderAt);
         LockTodoWidget.updateAll(this);
         ReminderScheduler.reschedule(this);
-        if (selectedReminderAt > 0L && !ReminderScheduler.canScheduleExact(this)) {
-            ReminderScheduler.requestExactAlarmPermission(this);
+        if (selectedReminderAt > 0L) {
+            startActivity(new Intent(this, ReminderPermissionActivity.class));
         }
 
         selectedReminderAt = 0L;

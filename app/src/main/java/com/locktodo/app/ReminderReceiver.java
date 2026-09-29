@@ -1,5 +1,6 @@
 package com.locktodo.app;
 
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -10,6 +11,8 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
 
 import java.util.List;
 
@@ -54,6 +57,49 @@ public class ReminderReceiver extends BroadcastReceiver {
     }
 
     private void showReminder(Context context, String text) {
+        PowerManager power = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        KeyguardManager keyguard = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+
+        boolean interactive = power != null && power.isInteractive();
+        boolean locked = keyguard != null && keyguard.isKeyguardLocked();
+
+        if (!interactive) wakeScreen(context);
+
+        if (interactive && !locked && Settings.canDrawOverlays(context)) {
+            Intent overlay = new Intent(context, ReminderOverlayService.class);
+            overlay.putExtra(ReminderOverlayService.EXTRA_TEXT, text);
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(overlay);
+                } else {
+                    context.startService(overlay);
+                }
+                return;
+            } catch (Exception ignored) {
+            }
+        }
+
+        showFullScreenReminder(context, text);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void wakeScreen(Context context) {
+        PowerManager power = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        if (power == null || power.isInteractive()) return;
+
+        try {
+            PowerManager.WakeLock wakeLock = power.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                            | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                            | PowerManager.ON_AFTER_RELEASE,
+                    "LockTodo:ReminderWake"
+            );
+            wakeLock.acquire(5000L);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void showFullScreenReminder(Context context, String text) {
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
 
@@ -63,7 +109,7 @@ public class ReminderReceiver extends BroadcastReceiver {
                     "LockTodo 알림",
                     NotificationManager.IMPORTANCE_HIGH
             );
-            channel.setDescription("설정한 시간에 할 일을 잠금화면에 표시합니다.");
+            channel.setDescription("설정한 시간에 할 일을 화면 가운데 표시합니다.");
             channel.enableVibration(false);
             channel.setSound(null, null);
             channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);

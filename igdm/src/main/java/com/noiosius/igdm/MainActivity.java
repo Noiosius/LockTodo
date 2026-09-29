@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
         nav.setBackgroundColor(Color.rgb(8, 10, 15));
-        nav.setPadding(0, dp(2), 0, dp(2));
+        nav.setPadding(0, 0, 0, 0);
 
         dmButton = makeNavButton(R.drawable.nav_dm);
         storyButton = makeNavButton(R.drawable.nav_story);
@@ -72,7 +72,7 @@ public class MainActivity extends Activity {
         nav.addView(profileButton, navParams());
         root.addView(nav, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(64)
+                dp(50)
         ));
 
         setContentView(root);
@@ -131,7 +131,7 @@ public class MainActivity extends Activity {
         button.setImageResource(drawable);
         button.setBackgroundColor(Color.TRANSPARENT);
         button.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
-        button.setPadding(dp(24), dp(14), dp(24), dp(14));
+        button.setPadding(dp(18), dp(10), dp(18), dp(10));
         return button;
     }
 
@@ -262,16 +262,24 @@ public class MainActivity extends Activity {
     private void injectHideInstagramBottomNav(WebView view) {
         String script =
                 "(function(){" +
-                "var hide=function(){" +
-                "document.querySelectorAll('*').forEach(function(e){" +
+                "var isNavLink=function(a){" +
                 "try{" +
-                "var s=getComputedStyle(e),r=e.getBoundingClientRect();" +
-                "if((s.position==='fixed'||s.position==='sticky')&&r.height>35&&r.height<130&&r.bottom>innerHeight-6&&e.querySelectorAll('a[href]').length>=2){" +
-                "e.style.setProperty('display','none','important');" +
-                "}" +
+                "var p=new URL(a.href,location.origin).pathname;" +
+                "return p==='/'||p.indexOf('/explore')===0||p.indexOf('/reels')===0||p.indexOf('/direct')===0||/^\\/[^\\/]+\\/$/.test(p);" +
+                "}catch(e){return false;}" +
+                "};" +
+                "var hide=function(){" +
+                "document.querySelectorAll('nav,[role=navigation],div').forEach(function(e){" +
+                "try{" +
+                "var r=e.getBoundingClientRect();" +
+                "if(r.width<innerWidth*0.72||r.height<35||r.height>130||r.top<innerHeight*0.60)return;" +
+                "var links=[].slice.call(e.querySelectorAll('a[href]')).filter(isNavLink);" +
+                "if(links.length>=3)e.style.setProperty('display','none','important');" +
                 "}catch(x){}" +
                 "});" +
-                "};hide();new MutationObserver(hide).observe(document.documentElement,{childList:true,subtree:true});" +
+                "};" +
+                "hide();" +
+                "new MutationObserver(hide).observe(document.documentElement,{childList:true,subtree:true});" +
                 "})();";
         view.evaluateJavascript(script, null);
     }
@@ -279,33 +287,31 @@ public class MainActivity extends Activity {
     private void injectStoryOnly(WebView view) {
         String script =
                 "(function(){" +
+                "var old=document.getElementById('igdm-story-cover');if(old)old.remove();" +
                 "var tries=0;" +
                 "var timer=setInterval(function(){" +
                 "tries++;" +
-                "var links=[].slice.call(document.querySelectorAll(\"a[href^='/stories/']\")).filter(function(a){var r=a.getBoundingClientRect();return r.width>0&&r.height>0;});" +
-                "if(links.length){" +
-                "clearInterval(timer);" +
-                "var root=links[0];" +
-                "while(root.parentElement&&root.parentElement!==document.body){" +
-                "var p=root.parentElement;" +
-                "var count=p.querySelectorAll(\"a[href^='/stories/']\").length;" +
-                "var h=p.getBoundingClientRect().height;" +
-                "if(count>=Math.min(2,links.length)&&h<360){root=p;}else{break;}" +
+                "document.querySelectorAll('article').forEach(function(a){a.style.setProperty('display','none','important');});" +
+                "var top=0;" +
+                "var articles=[].slice.call(document.querySelectorAll('article')).filter(function(a){var r=a.getBoundingClientRect();return r.width>0&&r.height>0;});" +
+                "if(articles.length)top=articles[0].getBoundingClientRect().top;" +
+                "if(!top||top<170){" +
+                "var storyLinks=[].slice.call(document.querySelectorAll(\"a[href*='/stories/']\")).filter(function(a){var r=a.getBoundingClientRect();return r.width>0&&r.height>0&&r.top<innerHeight*0.45;});" +
+                "if(storyLinks.length){" +
+                "var max=0;storyLinks.forEach(function(a){var r=a.getBoundingClientRect();max=Math.max(max,r.bottom);});top=max+14;" +
                 "}" +
-                "document.querySelectorAll('body *').forEach(function(e){e.style.setProperty('visibility','hidden','important');});" +
-                "root.style.setProperty('visibility','visible','important');" +
-                "root.querySelectorAll('*').forEach(function(e){e.style.setProperty('visibility','visible','important');});" +
-                "root.style.setProperty('position','fixed','important');" +
-                "root.style.setProperty('top','12px','important');" +
-                "root.style.setProperty('left','0','important');" +
-                "root.style.setProperty('right','0','important');" +
-                "root.style.setProperty('z-index','2147483647','important');" +
-                "root.style.setProperty('background','#000','important');" +
-                "document.documentElement.style.background='#000';document.body.style.background='#000';" +
-                "}else if(tries>40){clearInterval(timer);}" +
-                "},150);" +
+                "}" +
+                "if(!top||top<170)top=Math.min(330,Math.max(230,innerHeight*0.34));" +
+                "var cover=document.getElementById('igdm-story-cover');" +
+                "if(!cover){cover=document.createElement('div');cover.id='igdm-story-cover';document.body.appendChild(cover);}" +
+                "cover.style.cssText='position:fixed;left:0;right:0;bottom:0;top:'+Math.round(top)+'px;background:#000;z-index:2147483000;pointer-events:auto;';" +
+                "document.documentElement.style.setProperty('overflow','hidden','important');" +
+                "document.body.style.setProperty('overflow','hidden','important');" +
+                "if(tries>15)clearInterval(timer);" +
+                "},180);" +
                 "})();";
         view.evaluateJavascript(script, null);
+        injectHideInstagramBottomNav(view);
     }
 
     private void openOwnProfileFromHome(WebView view) {

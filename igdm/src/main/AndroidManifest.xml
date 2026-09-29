@@ -4,7 +4,8 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/ic_igdm"
+        android:icon="@mipmap/ic_igdm_v5"
+        android:roundIcon="@mipmap/ic_igdm_v5"
         android:label="IG DM"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"

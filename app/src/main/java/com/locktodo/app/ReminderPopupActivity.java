@@ -2,6 +2,7 @@ package com.locktodo.app;
 
 import android.app.Activity;
 import android.app.NotificationManager;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -13,6 +14,7 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -20,7 +22,9 @@ public class ReminderPopupActivity extends Activity {
     private float dragStartX;
     private float knobStartTranslation;
     private int dragLimit;
-    private int dismissThreshold;
+    private int actionThreshold;
+    private int itemIndex = -1;
+    private ImageView knobIcon;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,6 +32,8 @@ public class ReminderPopupActivity extends Activity {
         setShowWhenLocked(true);
         setTurnScreenOn(true);
         setFinishOnTouchOutside(false);
+
+        itemIndex = getIntent().getIntExtra(ReminderReceiver.EXTRA_ITEM_INDEX, -1);
 
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm != null) nm.cancel(ReminderReceiver.NOTIFICATION_ID);
@@ -84,22 +90,29 @@ public class ReminderPopupActivity extends Activity {
         trackBg.setCornerRadius(dp(22));
         track.setBackground(trackBg);
 
-        View knob = new View(this);
+        FrameLayout knob = new FrameLayout(this);
         GradientDrawable knobBg = new GradientDrawable();
         knobBg.setShape(GradientDrawable.OVAL);
-        knobBg.setColor(light ? Color.argb(220, 255, 255, 255) : Color.argb(210, 35, 35, 35));
-        knobBg.setStroke(dp(1), light ? Color.argb(90, 255, 255, 255) : Color.argb(70, 0, 0, 0));
+        knobBg.setColor(light ? Color.argb(235, 255, 255, 255) : Color.argb(225, 35, 35, 35));
+        knobBg.setStroke(dp(1), light ? Color.argb(95, 255, 255, 255) : Color.argb(80, 0, 0, 0));
         knob.setBackground(knobBg);
 
-        FrameLayout.LayoutParams knobParams = new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER);
-        track.addView(knob, knobParams);
+        knobIcon = new ImageView(this);
+        knobIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        knobIcon.setPadding(dp(8), dp(8), dp(8), dp(8));
+        knobIcon.setVisibility(View.INVISIBLE);
+        knob.addView(knobIcon, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
 
+        track.addView(knob, new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER));
         LinearLayout.LayoutParams trackParams = new LinearLayout.LayoutParams(dp(174), dp(42));
         trackParams.topMargin = dp(5);
         card.addView(track, trackParams);
 
         dragLimit = dp(62);
-        dismissThreshold = dp(50);
+        actionThreshold = dp(50);
         knob.setOnTouchListener((v, event) -> handleKnobDrag(v, event));
 
         outer.addView(card, new LinearLayout.LayoutParams(
@@ -122,23 +135,54 @@ public class ReminderPopupActivity extends Activity {
             case MotionEvent.ACTION_DOWN:
                 dragStartX = event.getRawX();
                 knobStartTranslation = knob.getTranslationX();
+                updateKnobIcon(0f);
                 return true;
+
             case MotionEvent.ACTION_MOVE:
                 float next = knobStartTranslation + event.getRawX() - dragStartX;
                 next = Math.max(-dragLimit, Math.min(dragLimit, next));
                 knob.setTranslationX(next);
+                updateKnobIcon(next);
                 return true;
+
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                if (Math.abs(knob.getTranslationX()) >= dismissThreshold) {
+                float translation = knob.getTranslationX();
+                if (translation >= actionThreshold) {
                     finish();
+                } else if (translation <= -actionThreshold) {
+                    openReschedule();
                 } else {
+                    knobIcon.setVisibility(View.INVISIBLE);
                     knob.animate().translationX(0f).setDuration(140L).start();
                 }
                 return true;
+
             default:
                 return false;
         }
+    }
+
+    private void updateKnobIcon(float translation) {
+        if (Math.abs(translation) < actionThreshold) {
+            knobIcon.setVisibility(View.INVISIBLE);
+            return;
+        }
+
+        knobIcon.setImageResource(
+                translation > 0f ? R.drawable.ic_delete_small : R.drawable.ic_clock_drag
+        );
+        knobIcon.setVisibility(View.VISIBLE);
+    }
+
+    private void openReschedule() {
+        if (itemIndex >= 0) {
+            Intent intent = new Intent(this, QuickTodoActivity.class);
+            intent.putExtra(QuickTodoActivity.EXTRA_EDIT_INDEX, itemIndex);
+            intent.putExtra(QuickTodoActivity.EXTRA_REMINDER_ONLY, true);
+            startActivity(intent);
+        }
+        finish();
     }
 
     private int dp(int value) {

@@ -5,6 +5,8 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
@@ -17,6 +19,8 @@ import android.webkit.WebViewClient;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 
+import org.json.JSONArray;
+
 public class MainActivity extends Activity {
     private static final String DIRECT_URL = "https://www.instagram.com/direct/inbox/";
     private static final String HOME_URL = "https://www.instagram.com/";
@@ -25,12 +29,16 @@ public class MainActivity extends Activity {
     private static final int MODE_STORY = 1;
     private static final int MODE_PROFILE = 2;
 
+    private final Handler handler = new Handler(Looper.getMainLooper());
+
     private WebView webView;
     private ImageButton dmButton;
     private ImageButton storyButton;
     private ImageButton profileButton;
+
     private int mode = MODE_DM;
     private boolean profileBootstrap = false;
+    private int navigationGeneration = 0;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -51,6 +59,7 @@ public class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.BLACK);
+        webView.setAlpha(0f);
         root.addView(webView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
@@ -61,7 +70,6 @@ public class MainActivity extends Activity {
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
         nav.setBackgroundColor(Color.rgb(8, 10, 15));
-        nav.setPadding(0, 0, 0, 0);
 
         dmButton = makeNavButton(R.drawable.nav_dm);
         storyButton = makeNavButton(R.drawable.nav_story);
@@ -70,6 +78,7 @@ public class MainActivity extends Activity {
         nav.addView(dmButton, navParams());
         nav.addView(storyButton, navParams());
         nav.addView(profileButton, navParams());
+
         root.addView(nav, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(50)
@@ -96,6 +105,12 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                hideContent();
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return handleNavigation(view, request.getUrl());
             }
@@ -121,8 +136,10 @@ public class MainActivity extends Activity {
         } else {
             mode = savedInstanceState.getInt("mode", MODE_DM);
             profileBootstrap = savedInstanceState.getBoolean("profileBootstrap", false);
-            webView.restoreState(savedInstanceState);
             updateNavState();
+            if (webView.restoreState(savedInstanceState) == null) {
+                openDm();
+            }
         }
     }
 
@@ -140,24 +157,38 @@ public class MainActivity extends Activity {
     }
 
     private void openDm() {
+        navigationGeneration++;
         mode = MODE_DM;
         profileBootstrap = false;
         updateNavState();
+        hideContent();
         webView.loadUrl(DIRECT_URL);
     }
 
     private void openStories() {
+        navigationGeneration++;
         mode = MODE_STORY;
         profileBootstrap = false;
         updateNavState();
+        hideContent();
         webView.loadUrl(HOME_URL);
     }
 
     private void openProfile() {
+        navigationGeneration++;
         mode = MODE_PROFILE;
         profileBootstrap = true;
         updateNavState();
+        hideContent();
         webView.loadUrl(HOME_URL);
+    }
+
+    private void hideContent() {
+        if (webView != null) webView.setAlpha(0f);
+    }
+
+    private void showContent() {
+        if (webView != null) webView.animate().alpha(1f).setDuration(90L).start();
     }
 
     private void updateNavState() {
@@ -193,6 +224,7 @@ public class MainActivity extends Activity {
             if (isDirectPath(path) || isSingleReelPath(path)) {
                 return false;
             }
+            hideContent();
             view.loadUrl(DIRECT_URL);
             return true;
         }
@@ -201,6 +233,7 @@ public class MainActivity extends Activity {
             if ("/".equals(path) || isStoryPath(path)) {
                 return false;
             }
+            hideContent();
             view.loadUrl(HOME_URL);
             return true;
         }
@@ -224,16 +257,23 @@ public class MainActivity extends Activity {
 
     private void handleFinishedPage(WebView view, Uri uri) {
         if (!isInstagramHost(uri.getHost())) return;
+
         String path = safePath(uri);
 
-        if (isAuthPath(path)) return;
+        if (isAuthPath(path)) {
+            showContent();
+            return;
+        }
 
         if (mode == MODE_DM) {
             if (isDirectPath(path)) {
                 injectHideInstagramBottomNav(view);
+                handler.postDelayed(this::showContent, 80L);
             } else if (isSingleReelPath(path)) {
                 injectSingleReelLock(view);
+                handler.postDelayed(this::showContent, 80L);
             } else {
+                hideContent();
                 view.loadUrl(DIRECT_URL);
             }
             return;
@@ -241,10 +281,13 @@ public class MainActivity extends Activity {
 
         if (mode == MODE_STORY) {
             if ("/".equals(path)) {
-                injectStoryOnly(view);
+                int generation = navigationGeneration;
+                prepareStoryOnly(view, generation, 0);
             } else if (isStoryPath(path)) {
                 injectHideInstagramBottomNav(view);
+                handler.postDelayed(this::showContent, 80L);
             } else {
+                hideContent();
                 view.loadUrl(HOME_URL);
             }
             return;
@@ -252,10 +295,113 @@ public class MainActivity extends Activity {
 
         if (mode == MODE_PROFILE) {
             if (profileBootstrap && "/".equals(path)) {
-                openOwnProfileFromHome(view);
+                int generation = navigationGeneration;
+                resolveOwnProfile(view, generation, 0);
             } else {
                 injectHideInstagramBottomNav(view);
+                handler.postDelayed(this::showContent, 80L);
             }
+        }
+    }
+
+    private void prepareStoryOnly(WebView view, int generation, int attempt) {
+        if (generation != navigationGeneration || mode != MODE_STORY) return;
+
+        String script =
+                "(function(){" +
+                "var links=[].slice.call(document.querySelectorAll(\"a[href*='/stories/']\")).filter(function(a){" +
+                "var r=a.getBoundingClientRect();" +
+                "return r.width>0&&r.height>0&&r.top<420;" +
+                "});" +
+                "if(!links.length)return false;" +
+                "var root=links[0];" +
+                "while(root.parentElement&&root.parentElement!==document.body){" +
+                "var p=root.parentElement;" +
+                "var count=p.querySelectorAll(\"a[href*='/stories/']\").length;" +
+                "var r=p.getBoundingClientRect();" +
+                "if(count>=Math.min(2,links.length)&&r.height<390&&r.width>innerWidth*0.55)root=p;" +
+                "else break;" +
+                "}" +
+                "var node=root;" +
+                "while(node&&node.parentElement){" +
+                "var parent=node.parentElement;" +
+                "[].slice.call(parent.children).forEach(function(sib){" +
+                "if(sib!==node)sib.style.setProperty('display','none','important');" +
+                "});" +
+                "if(parent===document.body)break;" +
+                "node=parent;" +
+                "}" +
+                "document.documentElement.style.setProperty('background','#000','important');" +
+                "document.body.style.setProperty('background','#000','important');" +
+                "root.style.setProperty('display','block','important');" +
+                "links.forEach(function(a){" +
+                "if(a.dataset.igdmStoryDirect)return;" +
+                "a.dataset.igdmStoryDirect='1';" +
+                "a.addEventListener('click',function(e){" +
+                "e.preventDefault();e.stopImmediatePropagation();location.assign(a.href);" +
+                "},true);" +
+                "});" +
+                "return true;" +
+                "})();";
+
+        view.evaluateJavascript(script, value -> {
+            if (generation != navigationGeneration || mode != MODE_STORY) return;
+
+            if ("true".equals(value)) {
+                injectHideInstagramBottomNav(view);
+                handler.postDelayed(this::showContent, 80L);
+            } else if (attempt < 35) {
+                handler.postDelayed(() -> prepareStoryOnly(view, generation, attempt + 1), 140L);
+            } else {
+                showContent();
+            }
+        });
+    }
+
+    private void resolveOwnProfile(WebView view, int generation, int attempt) {
+        if (generation != navigationGeneration || mode != MODE_PROFILE) return;
+
+        String script =
+                "(function(){" +
+                "var all=[].slice.call(document.querySelectorAll('a[href]'));" +
+                "var target=all.find(function(a){" +
+                "return !!a.querySelector(\"svg[aria-label='Profile'],svg[aria-label='프로필'],[aria-label='Profile'],[aria-label='프로필']\");" +
+                "});" +
+                "if(!target){" +
+                "target=all.find(function(a){" +
+                "try{" +
+                "var p=new URL(a.href,location.origin).pathname;" +
+                "var r=a.getBoundingClientRect();" +
+                "return /^\\/[^\\/]+\\/$/.test(p)&&r.top>innerHeight*0.58&&a.querySelector('img');" +
+                "}catch(e){return false;}" +
+                "});" +
+                "}" +
+                "return target?target.href:'';" +
+                "})();";
+
+        view.evaluateJavascript(script, value -> {
+            if (generation != navigationGeneration || mode != MODE_PROFILE) return;
+
+            String profileUrl = decodeJsString(value);
+            if (profileUrl != null && !profileUrl.isEmpty()) {
+                profileBootstrap = false;
+                hideContent();
+                webView.loadUrl(profileUrl);
+            } else if (attempt < 35) {
+                handler.postDelayed(() -> resolveOwnProfile(view, generation, attempt + 1), 140L);
+            } else {
+                showContent();
+            }
+        });
+    }
+
+    private String decodeJsString(String value) {
+        if (value == null || "null".equals(value) || "\"\"".equals(value)) return "";
+        try {
+            JSONArray array = new JSONArray("[" + value + "]");
+            return array.getString(0);
+        } catch (Exception ignored) {
+            return "";
         }
     }
 
@@ -280,63 +426,6 @@ public class MainActivity extends Activity {
                 "};" +
                 "hide();" +
                 "new MutationObserver(hide).observe(document.documentElement,{childList:true,subtree:true});" +
-                "})();";
-        view.evaluateJavascript(script, null);
-    }
-
-    private void injectStoryOnly(WebView view) {
-        String script =
-                "(function(){" +
-                "var old=document.getElementById('igdm-story-cover');if(old)old.remove();" +
-                "var tries=0;" +
-                "var timer=setInterval(function(){" +
-                "tries++;" +
-                "document.querySelectorAll('article').forEach(function(a){a.style.setProperty('display','none','important');});" +
-                "var top=0;" +
-                "var articles=[].slice.call(document.querySelectorAll('article')).filter(function(a){var r=a.getBoundingClientRect();return r.width>0&&r.height>0;});" +
-                "if(articles.length)top=articles[0].getBoundingClientRect().top;" +
-                "if(!top||top<170){" +
-                "var storyLinks=[].slice.call(document.querySelectorAll(\"a[href*='/stories/']\")).filter(function(a){var r=a.getBoundingClientRect();return r.width>0&&r.height>0&&r.top<innerHeight*0.45;});" +
-                "if(storyLinks.length){" +
-                "var max=0;storyLinks.forEach(function(a){var r=a.getBoundingClientRect();max=Math.max(max,r.bottom);});top=max+14;" +
-                "}" +
-                "}" +
-                "if(!top||top<170)top=Math.min(330,Math.max(230,innerHeight*0.34));" +
-                "var cover=document.getElementById('igdm-story-cover');" +
-                "if(!cover){cover=document.createElement('div');cover.id='igdm-story-cover';document.body.appendChild(cover);}" +
-                "cover.style.cssText='position:fixed;left:0;right:0;bottom:0;top:'+Math.round(top)+'px;background:#000;z-index:2147483000;pointer-events:auto;';" +
-                "document.documentElement.style.setProperty('overflow','hidden','important');" +
-                "document.body.style.setProperty('overflow','hidden','important');" +
-                "if(tries>15)clearInterval(timer);" +
-                "},180);" +
-                "})();";
-        view.evaluateJavascript(script, null);
-        injectHideInstagramBottomNav(view);
-    }
-
-    private void openOwnProfileFromHome(WebView view) {
-        String script =
-                "(function(){" +
-                "var tries=0;" +
-                "var timer=setInterval(function(){" +
-                "tries++;" +
-                "var all=[].slice.call(document.querySelectorAll('a[href]'));" +
-                "var target=all.find(function(a){" +
-                "var s=a.querySelector(\"svg[aria-label='Profile'],svg[aria-label='프로필'],[aria-label='Profile'],[aria-label='프로필']\");" +
-                "return !!s;" +
-                "});" +
-                "if(!target){" +
-                "target=all.find(function(a){" +
-                "try{" +
-                "var p=new URL(a.href,location.origin).pathname;" +
-                "var r=a.getBoundingClientRect();" +
-                "return /^\\/[^\\/]+\\/$/.test(p)&&r.top>innerHeight*0.68&&a.querySelector('img');" +
-                "}catch(e){return false;}" +
-                "});" +
-                "}" +
-                "if(target){clearInterval(timer);location.href=target.href;}" +
-                "else if(tries>35){clearInterval(timer);}" +
-                "},150);" +
                 "})();";
         view.evaluateJavascript(script, null);
     }
@@ -395,8 +484,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean isLikelyProfilePath(String path) {
-        if (path == null) return false;
-        if (!path.matches("^/[^/]+/$")) return false;
+        if (path == null || !path.matches("^/[^/]+/$")) return false;
         return !"/explore/".equals(path)
                 && !"/reels/".equals(path)
                 && !"/direct/".equals(path)
@@ -414,6 +502,7 @@ public class MainActivity extends Activity {
     @Override
     public void onBackPressed() {
         if (webView != null && webView.canGoBack()) {
+            hideContent();
             webView.goBack();
         } else if (mode != MODE_DM) {
             openDm();
@@ -424,6 +513,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
         if (webView != null) {
             webView.stopLoading();
             webView.setWebChromeClient(null);

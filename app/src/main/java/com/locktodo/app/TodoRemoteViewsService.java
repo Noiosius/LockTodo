@@ -73,7 +73,7 @@ public class TodoRemoteViewsService extends RemoteViewsService {
             views.setTextColor(R.id.todo_handle, handleColor);
             views.setTextViewTextSize(R.id.todo_text, TypedValue.COMPLEX_UNIT_SP, textSize);
             views.setTextViewTextSize(R.id.todo_check, TypedValue.COMPLEX_UNIT_SP, Math.max(14, textSize + 2));
-            views.setTextViewTextSize(R.id.todo_clock, TypedValue.COMPLEX_UNIT_SP, Math.max(13, textSize - 1));
+            views.setTextViewTextSize(R.id.todo_clock, TypedValue.COMPLEX_UNIT_SP, Math.max(20, textSize + 4));
             views.setTextViewTextSize(R.id.todo_handle, TypedValue.COMPLEX_UNIT_SP, Math.max(15, textSize + 1));
             views.setViewPadding(R.id.todo_row_root, 0, dp(rowPadding), 0, dp(rowPadding));
 

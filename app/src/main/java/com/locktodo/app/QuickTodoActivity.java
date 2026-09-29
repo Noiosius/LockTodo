@@ -81,10 +81,10 @@ public class QuickTodoActivity extends Activity {
 
         reminderButton = new TextView(this);
         reminderButton.setText("◷");
-        reminderButton.setTextSize(21);
+        reminderButton.setTextSize(26);
         reminderButton.setTextColor(muted);
         reminderButton.setGravity(Gravity.CENTER);
-        row.addView(reminderButton, new LinearLayout.LayoutParams(dp(40), dp(46)));
+        row.addView(reminderButton, new LinearLayout.LayoutParams(dp(46), dp(46)));
 
         input = new EditText(this);
         input.setSingleLine(true);

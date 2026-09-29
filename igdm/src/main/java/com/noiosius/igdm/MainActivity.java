@@ -34,6 +34,7 @@ public class MainActivity extends Activity {
 
     private WebView mainWebView;
     private WebView storyWebView;
+    private View storyMask;
     private FrameLayout webContainer;
 
     private ImageButton dmButton;
@@ -79,6 +80,14 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT
         ));
         webContainer.addView(storyWebView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
+        storyMask = new View(this);
+        storyMask.setBackgroundColor(Color.BLACK);
+        storyMask.setVisibility(View.GONE);
+        webContainer.addView(storyMask, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
         ));
@@ -147,6 +156,7 @@ public class MainActivity extends Activity {
                     storyReady = false;
                 } else if (isStoryPath(path)) {
                     expandStoryWebView();
+                    hideStoryMask();
                     if (mode == MODE_STORY) storyWebView.setVisibility(View.VISIBLE);
                 }
             }
@@ -257,6 +267,15 @@ public class MainActivity extends Activity {
         storySelectedWaiting = false;
         mainWebView.setVisibility(View.INVISIBLE);
         storyWebView.setVisibility(View.VISIBLE);
+
+        String url = storyWebView.getUrl();
+        String path = safePath(Uri.parse(url == null ? HOME_URL : url));
+        if (isStoryPath(path)) {
+            hideStoryMask();
+        } else if (storyReady) {
+            storyMask.setVisibility(View.VISIBLE);
+            storyMask.bringToFront();
+        }
     }
 
     private void showMainContent() {
@@ -346,7 +365,12 @@ public class MainActivity extends Activity {
         if (!isInstagramHost(uri.getHost())) return true;
         if (isAuthPath(path)) return false;
 
-        if ("/".equals(path) || isStoryPath(path)) return false;
+        if (isStoryPath(path)) {
+            expandStoryWebView();
+            hideStoryMask();
+            return false;
+        }
+        if ("/".equals(path)) return false;
 
         view.loadUrl(HOME_URL);
         return true;
@@ -368,6 +392,7 @@ public class MainActivity extends Activity {
 
         if (isStoryPath(path)) {
             expandStoryWebView();
+            hideStoryMask();
             injectHideInstagramBottomNav(view);
             if (mode == MODE_STORY) showStoryLayer();
             return;
@@ -396,7 +421,6 @@ public class MainActivity extends Activity {
                 "if(max>100)cut=max+14;" +
                 "}" +
                 "if(!cut||cut<120)cut=240;" +
-                "document.querySelectorAll('article').forEach(function(a){a.style.setProperty('visibility','hidden','important');});" +
                 "document.documentElement.style.setProperty('overflow-y','hidden','important');" +
                 "document.body.style.setProperty('overflow-y','hidden','important');" +
                 "return [Math.round(cut),Math.round(innerWidth)];" +
@@ -414,14 +438,10 @@ public class MainActivity extends Activity {
                 int cropHeight = (int) Math.round(cssCut * webWidth / cssWidth);
                 cropHeight = Math.max(dp(150), Math.min(dp(310), cropHeight));
 
-                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        cropHeight
-                );
-                params.gravity = Gravity.TOP;
-                storyWebView.setLayoutParams(params);
+                expandStoryWebView();
                 storyWebView.scrollTo(0, 0);
                 storyWebView.setVerticalScrollBarEnabled(false);
+                showStoryMaskFrom(cropHeight);
 
                 injectHideInstagramBottomNav(view);
 
@@ -432,13 +452,9 @@ public class MainActivity extends Activity {
                     handler.postDelayed(() -> prepareStoryCrop(view, attempt + 1), 100L);
                 } else {
                     // 끝까지 측정이 안 되면 홈 상단만 고정 높이로 보여준다.
-                    FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                            FrameLayout.LayoutParams.MATCH_PARENT,
-                            dp(230)
-                    );
-                    params.gravity = Gravity.TOP;
-                    storyWebView.setLayoutParams(params);
+                    expandStoryWebView();
                     storyWebView.scrollTo(0, 0);
+                    showStoryMaskFrom(dp(230));
                     injectHideInstagramBottomNav(view);
                     storyReady = true;
                     if (mode == MODE_STORY || storySelectedWaiting) showStoryLayer();
@@ -455,6 +471,22 @@ public class MainActivity extends Activity {
         params.gravity = Gravity.TOP;
         storyWebView.setLayoutParams(params);
         storyWebView.setVerticalScrollBarEnabled(false);
+    }
+
+    private void showStoryMaskFrom(int topPx) {
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        );
+        params.gravity = Gravity.TOP;
+        params.topMargin = Math.max(0, topPx);
+        storyMask.setLayoutParams(params);
+        storyMask.setVisibility(View.VISIBLE);
+        storyMask.bringToFront();
+    }
+
+    private void hideStoryMask() {
+        if (storyMask != null) storyMask.setVisibility(View.GONE);
     }
 
     private void resolveOwnProfile(WebView view, int generation, int attempt) {

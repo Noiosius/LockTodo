@@ -6,7 +6,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_igdm_v5"
         android:roundIcon="@mipmap/ic_igdm_v5"
-        android:label="IG DM"
+        android:label="Instagram DM"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.IGDM">

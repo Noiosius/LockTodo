@@ -606,10 +606,13 @@ public class MainActivity extends Activity {
                 "try{" +
                 "var t=e.target;" +
                 "var a=t&&t.closest?t.closest(\\\"a[href*='/stories/']\\\"):null;" +
-                "if(a){" +
+                "var y=(e.touches&&e.touches[0])?e.touches[0].clientY:e.clientY;" +
+                "var looksLikeStory=a||(y>65&&y<300);" +
+                "if(looksLikeStory){" +
                 "document.documentElement.style.removeProperty('overflow-y');" +
                 "document.body.style.removeProperty('overflow-y');" +
                 "IGDMStoryBridge.onStoryOpen();" +
+                "setTimeout(report,500);" +
                 "}" +
                 "}catch(x){}" +
                 "},true);" +

@@ -203,9 +203,11 @@ public class ReminderOverlayService extends Service {
             case MotionEvent.ACTION_CANCEL:
                 float translation = knob.getTranslationX();
                 if (translation >= actionThreshold) {
+                    ReminderVibrationService.stop(this);
                     removeOverlay();
                     stopSelf();
                 } else if (translation <= -actionThreshold) {
+                    ReminderVibrationService.stop(this);
                     openReschedule();
                 } else {
                     knobIcon.setVisibility(View.INVISIBLE);
@@ -254,7 +256,6 @@ public class ReminderOverlayService extends Service {
 
     @Override
     public void onDestroy() {
-        ReminderReceiver.stopReminderVibration(this);
         removeOverlay();
         super.onDestroy();
     }

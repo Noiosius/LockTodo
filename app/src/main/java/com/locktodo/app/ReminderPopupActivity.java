@@ -149,8 +149,10 @@ public class ReminderPopupActivity extends Activity {
             case MotionEvent.ACTION_CANCEL:
                 float translation = knob.getTranslationX();
                 if (translation >= actionThreshold) {
+                    ReminderVibrationService.stop(this);
                     finish();
                 } else if (translation <= -actionThreshold) {
+                    ReminderVibrationService.stop(this);
                     openReschedule();
                 } else {
                     knobIcon.setVisibility(View.INVISIBLE);
@@ -183,12 +185,6 @@ public class ReminderPopupActivity extends Activity {
             startActivity(intent);
         }
         finish();
-    }
-
-    @Override
-    protected void onDestroy() {
-        ReminderReceiver.stopReminderVibration(this);
-        super.onDestroy();
     }
 
     private int dp(int value) {

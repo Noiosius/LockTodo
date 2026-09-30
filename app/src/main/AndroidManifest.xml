@@ -66,6 +66,10 @@
             android:name=".ReminderOverlayService"
             android:exported="false" />
 
+        <service
+            android:name=".ReminderVibrationService"
+            android:exported="false" />
+
         <receiver
             android:name=".ReminderReceiver"
             android:exported="false" />

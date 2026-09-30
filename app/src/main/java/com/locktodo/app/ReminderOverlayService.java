@@ -254,6 +254,7 @@ public class ReminderOverlayService extends Service {
 
     @Override
     public void onDestroy() {
+        ReminderReceiver.stopReminderVibration(this);
         removeOverlay();
         super.onDestroy();
     }

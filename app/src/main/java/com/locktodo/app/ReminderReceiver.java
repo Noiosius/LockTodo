@@ -127,12 +127,27 @@ public class ReminderReceiver extends BroadcastReceiver {
                         VibrationEffect.createWaveform(
                                 timings,
                                 new int[]{0, amplitude, 0, amplitude},
-                                -1
+                                0
                         );
                 vibrator.vibrate(effect, attributes);
             } else {
-                vibrator.vibrate(timings, -1, attributes);
+                vibrator.vibrate(timings, 0, attributes);
             }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    static void stopReminderVibration(Context context) {
+        try {
+            Vibrator vibrator;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                VibratorManager manager =
+                        (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                vibrator = manager == null ? null : manager.getDefaultVibrator();
+            } else {
+                vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            }
+            if (vibrator != null) vibrator.cancel();
         } catch (Throwable ignored) {
         }
     }

@@ -185,6 +185,12 @@ public class ReminderPopupActivity extends Activity {
         finish();
     }
 
+    @Override
+    protected void onDestroy() {
+        ReminderReceiver.stopReminderVibration(this);
+        super.onDestroy();
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }

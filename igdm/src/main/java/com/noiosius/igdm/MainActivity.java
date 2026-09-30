@@ -7,16 +7,20 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.Window;
 import android.webkit.CookieManager;
+import android.webkit.WebBackForwardList;
 import android.webkit.WebChromeClient;
+import android.webkit.WebHistoryItem;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
-    private static final String DIRECT_URL = "https://www.instagram.com/direct/inbox/";
+    private static final String DIRECT_URL = "https://www.instagram.com/direct/";
 
     private WebView webView;
+    private String lastDirectUrl = DIRECT_URL;
+    private boolean restoringDirect = false;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -54,6 +58,12 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                handleVisitedUrl(view, url);
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return handleNavigation(view, request.getUrl());
             }
@@ -64,15 +74,20 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+                super.doUpdateVisitedHistory(view, url, isReload);
+                handleVisitedUrl(view, url);
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                handleVisitedUrl(view, url);
 
-                Uri uri = Uri.parse(url);
-                if (!isInstagramHost(uri.getHost())) return;
-
-                String path = safePath(uri);
-                if (!isDirectPath(path) && !isAuthPath(path)) {
-                    view.loadUrl(DIRECT_URL);
+                if (isAllowedDirectUrl(url)) {
+                    lastDirectUrl = normalizeDirectUrl(url);
+                    restoringDirect = false;
+                    injectDirectOnlyGuard(view);
                 }
             }
         });
@@ -96,13 +111,148 @@ public class MainActivity extends Activity {
             return true;
         }
 
-        String path = safePath(uri);
-        if (isDirectPath(path) || isAuthPath(path)) {
+        if (isDirectPath(safePath(uri))) {
+            lastDirectUrl = normalizeDirectUrl(uri.toString());
+            restoringDirect = false;
             return false;
         }
 
-        view.loadUrl(DIRECT_URL);
+        restoreLastDirect(view);
         return true;
+    }
+
+    private void handleVisitedUrl(WebView view, String url) {
+        if (url == null || url.isEmpty()) return;
+
+        Uri uri;
+        try {
+            uri = Uri.parse(url);
+        } catch (Exception ignored) {
+            restoreLastDirect(view);
+            return;
+        }
+
+        String scheme = uri.getScheme();
+        if ("about".equals(scheme) || "data".equals(scheme) || "blob".equals(scheme)) return;
+
+        if (!isInstagramHost(uri.getHost()) || !isDirectPath(safePath(uri))) {
+            restoreLastDirect(view);
+            return;
+        }
+
+        lastDirectUrl = normalizeDirectUrl(url);
+        restoringDirect = false;
+        injectDirectOnlyGuard(view);
+    }
+
+    private void restoreLastDirect(WebView view) {
+        if (view == null || restoringDirect) return;
+
+        String target = isAllowedDirectUrl(lastDirectUrl)
+                ? normalizeDirectUrl(lastDirectUrl)
+                : DIRECT_URL;
+
+        String current = view.getUrl();
+        if (current != null && normalizeDirectUrl(current).equals(target)) {
+            restoringDirect = false;
+            return;
+        }
+
+        restoringDirect = true;
+        view.stopLoading();
+        view.loadUrl(target);
+    }
+
+    private boolean isAllowedDirectUrl(String url) {
+        if (url == null || url.isEmpty()) return false;
+        try {
+            Uri uri = Uri.parse(url);
+            return isInstagramHost(uri.getHost()) && isDirectPath(safePath(uri));
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private String normalizeDirectUrl(String url) {
+        if (!isAllowedDirectUrl(url)) return DIRECT_URL;
+        return url;
+    }
+
+    private void injectDirectOnlyGuard(WebView view) {
+        if (view == null) return;
+
+        String safeLast = escapeJs(lastDirectUrl);
+        String safeFallback = escapeJs(DIRECT_URL);
+
+        String script =
+                "(function(){" +
+                "var FALLBACK='" + safeFallback + "';" +
+                "var allowed=function(u){" +
+                "try{" +
+                "var x=new URL(u,location.href);" +
+                "var h=x.hostname;" +
+                "var host=(h==='instagram.com'||h==='www.instagram.com'||h.endsWith('.instagram.com'));" +
+                "return host&&x.pathname.indexOf('/direct/')===0;" +
+                "}catch(e){return false;}" +
+                "};" +
+                "if(allowed(location.href)){window.__dmOnlyLast=location.href;}" +
+                "else if(!window.__dmOnlyLast){window.__dmOnlyLast='" + safeLast + "';}" +
+                "var restore=function(){" +
+                "var target=allowed(window.__dmOnlyLast)?window.__dmOnlyLast:FALLBACK;" +
+                "if(!allowed(location.href)){location.replace(target);}" +
+                "};" +
+                "if(window.__dmOnlyInstalled){restore();return;}" +
+                "window.__dmOnlyInstalled=true;" +
+
+                "document.addEventListener('click',function(e){" +
+                "try{" +
+                "var t=e.target;" +
+                "var a=t&&t.closest?t.closest('a[href]'):null;" +
+                "if(a&&!allowed(a.href)){" +
+                "e.preventDefault();" +
+                "e.stopPropagation();" +
+                "e.stopImmediatePropagation();" +
+                "return false;" +
+                "}" +
+                "}catch(x){}" +
+                "},true);" +
+
+                "var wrap=function(name){" +
+                "var original=history[name];" +
+                "history[name]=function(state,title,url){" +
+                "if(url!=null){" +
+                "try{" +
+                "var absolute=new URL(url,location.href).href;" +
+                "if(!allowed(absolute)){return;}" +
+                "window.__dmOnlyLast=absolute;" +
+                "}catch(e){return;}" +
+                "}" +
+                "return original.apply(this,arguments);" +
+                "};" +
+                "};" +
+                "wrap('pushState');wrap('replaceState');" +
+
+                "window.addEventListener('popstate',function(){" +
+                "setTimeout(function(){" +
+                "if(allowed(location.href)){window.__dmOnlyLast=location.href;}else{restore();}" +
+                "},0);" +
+                "});" +
+
+                "setInterval(function(){" +
+                "if(allowed(location.href)){window.__dmOnlyLast=location.href;}else{restore();}" +
+                "},120);" +
+                "})();";
+
+        view.evaluateJavascript(script, null);
+    }
+
+    private String escapeJs(String value) {
+        if (value == null) return "";
+        return value
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\r", "")
+                .replace("\n", "");
     }
 
     private boolean isInstagramHost(String host) {
@@ -118,23 +268,28 @@ public class MainActivity extends Activity {
     }
 
     private boolean isDirectPath(String path) {
-        return path.startsWith("/direct/");
-    }
-
-    private boolean isAuthPath(String path) {
-        return path.startsWith("/accounts/")
-                || path.startsWith("/challenge/")
-                || path.startsWith("/two_factor/")
-                || path.startsWith("/oauth/");
+        return path != null && path.startsWith("/direct/");
     }
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
+        if (webView == null) {
             finish();
+            return;
         }
+
+        WebBackForwardList list = webView.copyBackForwardList();
+        int current = list.getCurrentIndex();
+
+        for (int i = current - 1; i >= 0; i--) {
+            WebHistoryItem item = list.getItemAtIndex(i);
+            if (item != null && isAllowedDirectUrl(item.getUrl())) {
+                webView.goBackOrForward(i - current);
+                return;
+            }
+        }
+
+        finish();
     }
 
     @Override

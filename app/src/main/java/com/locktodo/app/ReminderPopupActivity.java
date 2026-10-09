@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -25,6 +26,7 @@ public class ReminderPopupActivity extends Activity {
     private int actionThreshold;
     private int itemIndex = -1;
     private ImageView knobIcon;
+    private long lastOutsideTap = 0L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,7 +44,11 @@ public class ReminderPopupActivity extends Activity {
         window.setBackgroundDrawableResource(android.R.color.transparent);
         window.getDecorView().setBackgroundColor(Color.TRANSPARENT);
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        window.addFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                        | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        );
 
         SharedPreferences prefs = AppPrefs.get(this);
         boolean light = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);
@@ -128,6 +134,21 @@ public class ReminderPopupActivity extends Activity {
         attrs.gravity = Gravity.CENTER;
         attrs.dimAmount = 0f;
         window.setAttributes(attrs);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getActionMasked() == MotionEvent.ACTION_OUTSIDE) {
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastOutsideTap <= 420L) {
+                ReminderVibrationService.stop(this);
+                finish();
+            } else {
+                lastOutsideTap = now;
+            }
+            return true;
+        }
+        return super.dispatchTouchEvent(ev);
     }
 
     private boolean handleKnobDrag(View knob, MotionEvent event) {

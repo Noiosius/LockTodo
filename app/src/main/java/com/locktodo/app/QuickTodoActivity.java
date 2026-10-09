@@ -57,7 +57,10 @@ public class QuickTodoActivity extends Activity {
         window.setBackgroundDrawableResource(android.R.color.transparent);
         window.getDecorView().setBackgroundColor(Color.TRANSPARENT);
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
-        window.addFlags(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+        window.addFlags(
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        );
         window.setSoftInputMode(
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE |
                 WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
@@ -212,7 +215,7 @@ public class QuickTodoActivity extends Activity {
 
         Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        dialog.setCanceledOnTouchOutside(true);
+        dialog.setCanceledOnTouchOutside(false);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -353,6 +356,25 @@ public class QuickTodoActivity extends Activity {
         if (dialogWindow != null) {
             dialogWindow.setBackgroundDrawableResource(android.R.color.transparent);
             dialogWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            dialogWindow.addFlags(
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            );
+
+            final long[] lastDialogOutsideTap = {0L};
+            dialogWindow.getDecorView().setOnTouchListener((v, event) -> {
+                if (event.getActionMasked() == MotionEvent.ACTION_OUTSIDE) {
+                    long now = SystemClock.elapsedRealtime();
+                    if (now - lastDialogOutsideTap[0] <= 420L) {
+                        dialog.dismiss();
+                    } else {
+                        lastDialogOutsideTap[0] = now;
+                    }
+                    return true;
+                }
+                return false;
+            });
+
             DisplayMetrics dm = getResources().getDisplayMetrics();
             WindowManager.LayoutParams p = dialogWindow.getAttributes();
             p.width = Math.min(dm.widthPixels - dp(48), dp(310));

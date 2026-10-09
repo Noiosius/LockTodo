@@ -35,7 +35,10 @@ public class ReorderActivity extends Activity {
         window.setBackgroundDrawableResource(android.R.color.transparent);
         window.getDecorView().setBackgroundColor(Color.TRANSPARENT);
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
-        window.addFlags(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+        window.addFlags(
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        );
 
         SharedPreferences prefs = AppPrefs.get(this);
         light = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);

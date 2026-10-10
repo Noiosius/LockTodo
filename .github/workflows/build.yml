@@ -18,11 +18,37 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Restore stable Android debug signing key
+      - name: Restore pinned LockTodo signing key
+        id: locktodo-signing-key
         uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
           key: locktodo-stable-debug-keystore-v1
+
+      - name: Verify pinned LockTodo signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$HOME/.android/debug.keystore"
+          EXPECTED="5C8A58E44AC2F1619CA20702FE7DD84A8DC64F5EB57B0FEFF9818A8C690BC52B"
+
+          if [ ! -f "$KEYSTORE" ]; then
+            echo "::error::Pinned LockTodo signing key is missing. Refusing to generate a replacement key."
+            exit 1
+          fi
+
+          keytool -exportcert             -keystore "$KEYSTORE"             -storepass android             -alias androiddebugkey             -file /tmp/locktodo-signing-cert.der >/dev/null 2>&1
+
+          ACTUAL="$(sha256sum /tmp/locktodo-signing-cert.der | awk '{print toupper($1)}')"
+
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::LockTodo signing certificate mismatch. Refusing to build an incompatible APK."
+            echo "Expected: $EXPECTED"
+            echo "Actual:   $ACTUAL"
+            exit 1
+          fi
+
+          echo "Pinned LockTodo signing certificate verified."
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -43,7 +69,7 @@ jobs:
       - name: Upload LockTodo APK
         uses: actions/upload-artifact@v4
         with:
-          name: LockTodo-v0.9.6-apk
+          name: LockTodo-v0.9.7-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 

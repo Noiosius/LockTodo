@@ -31,6 +31,21 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Stage official Android signing tools
+        shell: bash
+        run: |
+          mkdir -p signing-tools/lib
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" signing-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signing-tools/lib/
+
+      - name: Upload Android signing tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-signing-tools-35
+          path: signing-tools/
+          if-no-files-found: error
+
       - name: Build APKs
         run: gradle --no-daemon :app:assembleRelease :batterycheck:assembleDebug :daycount:assembleDebug :quiethome:assembleDebug :widgetalign:assembleDebug :vibedrain:assembleDebug :igdm:assembleDebug
 

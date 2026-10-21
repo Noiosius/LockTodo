@@ -53,7 +53,7 @@ jobs:
       - name: Upload unsigned LockTodo APK
         uses: actions/upload-artifact@v4
         with:
-          name: LockTodo-v0.9.8-unsigned-apk
+          name: LockTodo-v0.9.9-unsigned-apk
           path: app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
 

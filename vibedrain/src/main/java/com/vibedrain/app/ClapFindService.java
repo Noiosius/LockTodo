@@ -54,7 +54,7 @@ public class ClapFindService extends Service {
     private Vibrator vibrator;
     private AudioManager audioManager;
     private ToneGenerator tone;
-    private boolean alertActive;
+    private volatile boolean alertActive;
     private boolean soundActive;
     private int oldMediaVolume = -1;
     private boolean mediaVolumeRaised;
@@ -209,7 +209,9 @@ public class ClapFindService extends Service {
         hitTimes.add(when);
         if (hitTimes.size() > 4) hitTimes.remove(0);
         main.removeCallbacks(evaluatePattern);
-        main.postDelayed(evaluatePattern, 650L);
+        // The first intentional pause can be longer than the quick-clap
+        // interval. Do not discard the opening clap after just 650 ms.
+        main.postDelayed(evaluatePattern, hitTimes.size() == 1 ? 1550L : 650L);
     }
 
     private final Runnable evaluatePattern = () -> {

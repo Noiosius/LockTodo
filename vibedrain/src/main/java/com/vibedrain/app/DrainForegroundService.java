@@ -401,7 +401,7 @@ public class DrainForegroundService extends Service {
                         : new Notification.Builder(this);
 
         builder.setSmallIcon(R.drawable.ic_water_alert)
-                .setContentTitle("Vibe Drain 실행 중")
+                .setContentTitle("Vibe & Sound 실행 중")
                 .setContentText(statusText())
                 .setContentIntent(openPending)
                 .setOngoing(true)
@@ -459,7 +459,7 @@ public class DrainForegroundService extends Service {
         NotificationChannel channel =
                 new NotificationChannel(
                         CHANNEL_ID,
-                        "Vibe Drain 실행 상태",
+                        "Vibe & Sound 실행 상태",
                         NotificationManager.IMPORTANCE_LOW
                 );
         channel.setDescription(

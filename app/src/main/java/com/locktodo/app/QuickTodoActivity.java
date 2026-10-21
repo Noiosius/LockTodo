@@ -10,6 +10,8 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.text.InputFilter;
+import android.text.InputType;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -17,6 +19,7 @@ import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
@@ -230,11 +233,34 @@ public class QuickTodoActivity extends Activity {
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
 
+        LinearLayout quickDate = new LinearLayout(this);
+        quickDate.setOrientation(LinearLayout.HORIZONTAL);
+        quickDate.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView previousDay = new TextView(this);
+        previousDay.setText("<");
+        previousDay.setTextSize(20);
+        previousDay.setTextColor(fg);
+        previousDay.setGravity(Gravity.CENTER);
+        previousDay.setContentDescription("하루 전");
+        quickDate.addView(previousDay, new LinearLayout.LayoutParams(dp(25), dp(42)));
+
         TextView dateLabel = new TextView(this);
         dateLabel.setTextSize(15);
         dateLabel.setTextColor(fg);
         dateLabel.setGravity(Gravity.CENTER_VERTICAL);
-        top.addView(dateLabel, new LinearLayout.LayoutParams(0, dp(42), 1f));
+        quickDate.addView(dateLabel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)));
+
+        TextView nextDay = new TextView(this);
+        nextDay.setText(">");
+        nextDay.setTextSize(20);
+        nextDay.setTextColor(fg);
+        nextDay.setGravity(Gravity.CENTER);
+        nextDay.setContentDescription("하루 뒤");
+        quickDate.addView(nextDay, new LinearLayout.LayoutParams(dp(29), dp(42)));
+
+        top.addView(quickDate, new LinearLayout.LayoutParams(0, dp(42), 1f));
 
         ImageButton vibrationSettings = new ImageButton(this);
         vibrationSettings.setImageResource(R.drawable.ic_vibrate_small);
@@ -264,6 +290,9 @@ public class QuickTodoActivity extends Activity {
         String[] minuteValues = new String[60];
         for (int i = 0; i < 60; i++) minuteValues[i] = String.format(Locale.KOREA, "%02d", i);
         minute.setDisplayedValues(minuteValues);
+
+        EditText hourEntry = enableKeyboardEntry(hour, 1, 12, false);
+        EditText minuteEntry = enableKeyboardEntry(minute, 0, 59, true);
 
         int hour24 = chosen.get(Calendar.HOUR_OF_DAY);
         amPm.setValue(hour24 >= 12 ? 1 : 0);
@@ -296,8 +325,26 @@ public class QuickTodoActivity extends Activity {
         bottom.addView(apply, new LinearLayout.LayoutParams(dp(48), dp(40)));
         card.addView(bottom);
 
-        Runnable updateDateLabel = () -> dateLabel.setText(formatDateLabel(chosen));
+        Runnable updateDateLabel = () -> {
+            dateLabel.setText(formatDateLabel(chosen));
+            boolean canGoBack = startOfDay(chosen).getTimeInMillis()
+                    > startOfDay(Calendar.getInstance()).getTimeInMillis();
+            previousDay.setVisibility(canGoBack ? View.VISIBLE : View.GONE);
+        };
         updateDateLabel.run();
+
+        previousDay.setOnClickListener(v -> {
+            if (startOfDay(chosen).getTimeInMillis()
+                    > startOfDay(Calendar.getInstance()).getTimeInMillis()) {
+                chosen.add(Calendar.DAY_OF_MONTH, -1);
+                updateDateLabel.run();
+            }
+        });
+
+        nextDay.setOnClickListener(v -> {
+            chosen.add(Calendar.DAY_OF_MONTH, 1);
+            updateDateLabel.run();
+        });
 
         vibrationSettings.setOnClickListener(v -> {
             selectedReminderVibrate = !selectedReminderVibrate;
@@ -332,6 +379,10 @@ public class QuickTodoActivity extends Activity {
         });
 
         apply.setOnClickListener(v -> {
+            if (!commitTimeEntry(hourEntry, hour, 1, 12, false)
+                    || !commitTimeEntry(minuteEntry, minute, 0, 59, true)) {
+                return;
+            }
             int selectedHour = hour.getValue() % 12;
             if (amPm.getValue() == 1) selectedHour += 12;
             chosen.set(Calendar.HOUR_OF_DAY, selectedHour);
@@ -396,9 +447,108 @@ public class QuickTodoActivity extends Activity {
         return picker;
     }
 
+    private EditText enableKeyboardEntry(NumberPicker picker, int min, int max, boolean twoDigits) {
+        EditText field = findPickerInput(picker);
+        if (field == null) return null;
+
+        picker.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        field.setFocusable(true);
+        field.setFocusableInTouchMode(true);
+        field.setInputType(InputType.TYPE_CLASS_NUMBER);
+        field.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2)});
+        field.setSelectAllOnFocus(true);
+        field.setImeOptions(EditorInfo.IME_ACTION_DONE);
+
+        Runnable edit = () -> {
+            field.requestFocus();
+            field.selectAll();
+            field.post(() -> {
+                InputMethodManager keyboard = (InputMethodManager)
+                        getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (keyboard != null) keyboard.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT);
+            });
+        };
+        field.setOnClickListener(v -> edit.run());
+
+        // NumberPicker intercepts touches on some Android versions. A quick tap
+        // in the selected (middle) row still opens the keyboard; a drag scrolls.
+        final float[] downY = {0f};
+        final long[] downTime = {0L};
+        picker.setOnTouchListener((v, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                downY[0] = event.getY();
+                downTime[0] = SystemClock.elapsedRealtime();
+            } else if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                float middle = picker.getHeight() / 2f;
+                if (Math.abs(downY[0] - middle) < dp(29)
+                        && Math.abs(event.getY() - downY[0]) < dp(12)
+                        && SystemClock.elapsedRealtime() - downTime[0] < 350L) {
+                    edit.run();
+                    return true;
+                }
+            }
+            return false;
+        });
+        field.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                if (commitTimeEntry(field, picker, min, max, twoDigits)) {
+                    InputMethodManager keyboard = (InputMethodManager)
+                            getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (keyboard != null) keyboard.hideSoftInputFromWindow(field.getWindowToken(), 0);
+                    field.clearFocus();
+                }
+                return true;
+            }
+            return false;
+        });
+        return field;
+    }
+
+    private EditText findPickerInput(View view) {
+        if (view instanceof EditText) return (EditText) view;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                EditText input = findPickerInput(group.getChildAt(i));
+                if (input != null) return input;
+            }
+        }
+        return null;
+    }
+
+    private boolean commitTimeEntry(EditText entry, NumberPicker picker,
+                                    int min, int max, boolean twoDigits) {
+        if (entry == null) return true;
+        String raw = entry.getText().toString().trim();
+        int typed;
+        try {
+            typed = Integer.parseInt(raw);
+        } catch (NumberFormatException e) {
+            Toast.makeText(this, "숫자로 시간을 입력하세요.", Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        if (typed < min || typed > max) {
+            Toast.makeText(this, min + "부터 " + max + "까지 입력하세요.",
+                    Toast.LENGTH_SHORT).show();
+            entry.requestFocus();
+            entry.selectAll();
+            return false;
+        }
+        picker.setValue(typed);
+        entry.setText(twoDigits ? String.format(Locale.KOREA, "%02d", typed)
+                : String.valueOf(typed));
+        return true;
+    }
+
     private String formatDateLabel(Calendar selected) {
         Calendar today = Calendar.getInstance();
         if (sameDay(selected, today)) return "오늘";
+        Calendar tomorrow = (Calendar) today.clone();
+        tomorrow.add(Calendar.DAY_OF_MONTH, 1);
+        if (sameDay(selected, tomorrow)) return "내일";
+        Calendar dayAfterTomorrow = (Calendar) tomorrow.clone();
+        dayAfterTomorrow.add(Calendar.DAY_OF_MONTH, 1);
+        if (sameDay(selected, dayAfterTomorrow)) return "모레";
         SimpleDateFormat formatter = new SimpleDateFormat("M월 d일", Locale.KOREA);
         return formatter.format(selected.getTime());
     }

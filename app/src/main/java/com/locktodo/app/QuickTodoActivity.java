@@ -18,6 +18,7 @@ import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -249,8 +250,9 @@ public class QuickTodoActivity extends Activity {
         dateLabel.setTextSize(15);
         dateLabel.setTextColor(fg);
         dateLabel.setGravity(Gravity.CENTER_VERTICAL);
-        quickDate.addView(dateLabel, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)));
+        dateLabel.setGravity(Gravity.CENTER);
+        dateLabel.setSingleLine(true);
+        quickDate.addView(dateLabel, new LinearLayout.LayoutParams(dp(104), dp(42)));
 
         TextView nextDay = new TextView(this);
         nextDay.setText(">");
@@ -318,8 +320,8 @@ public class QuickTodoActivity extends Activity {
         bottom.addView(clear, new LinearLayout.LayoutParams(0, dp(40), 1f));
 
         TextView apply = new TextView(this);
-        apply.setText("✓");
-        apply.setTextSize(19);
+        apply.setText("완료");
+        apply.setTextSize(14);
         apply.setTextColor(fg);
         apply.setGravity(Gravity.CENTER);
         bottom.addView(apply, new LinearLayout.LayoutParams(dp(48), dp(40)));
@@ -329,7 +331,7 @@ public class QuickTodoActivity extends Activity {
             dateLabel.setText(formatDateLabel(chosen));
             boolean canGoBack = startOfDay(chosen).getTimeInMillis()
                     > startOfDay(Calendar.getInstance()).getTimeInMillis();
-            previousDay.setVisibility(canGoBack ? View.VISIBLE : View.GONE);
+            previousDay.setVisibility(canGoBack ? View.VISIBLE : View.INVISIBLE);
         };
         updateDateLabel.run();
 
@@ -437,7 +439,7 @@ public class QuickTodoActivity extends Activity {
     }
 
     private NumberPicker picker(boolean light, int min, int max) {
-        NumberPicker picker = new NumberPicker(this);
+        NumberPicker picker = new TapToEditNumberPicker(this);
         picker.setMinValue(min);
         picker.setMaxValue(max);
         picker.setWrapSelectorWheel(true);
@@ -447,19 +449,68 @@ public class QuickTodoActivity extends Activity {
         return picker;
     }
 
+    /**
+     * Detects a normal single tap over the center number *before* the
+     * NumberPicker's internal EditText consumes it. Wheel drags still scroll.
+     */
+    private static final class TapToEditNumberPicker extends NumberPicker {
+        private Runnable onCenterTap;
+        private float startX;
+        private float startY;
+        private long startMs;
+
+        TapToEditNumberPicker(Context context) {
+            super(context);
+        }
+
+        void setOnCenterTap(Runnable listener) {
+            onCenterTap = listener;
+        }
+
+        @Override
+        public boolean dispatchTouchEvent(MotionEvent event) {
+            final int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                startX = event.getX();
+                startY = event.getY();
+                startMs = SystemClock.elapsedRealtime();
+            }
+            boolean singleCenterTap = action == MotionEvent.ACTION_UP
+                    && Math.abs(event.getX() - startX) <= dpPx(12)
+                    && Math.abs(event.getY() - startY) <= dpPx(12)
+                    && SystemClock.elapsedRealtime() - startMs < 380L
+                    && Math.abs(startY - getHeight() / 2f) <= dpPx(28);
+            boolean handled = super.dispatchTouchEvent(event);
+            if (singleCenterTap && onCenterTap != null) {
+                post(onCenterTap);
+                return true;
+            }
+            return handled;
+        }
+
+        private float dpPx(int value) {
+            return value * getResources().getDisplayMetrics().density;
+        }
+    }
+
     private EditText enableKeyboardEntry(NumberPicker picker, int min, int max, boolean twoDigits) {
         EditText field = findPickerInput(picker);
         if (field == null) return null;
 
-        picker.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        // The wheel stays scroll-only until its selected number is tapped.
+        picker.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         field.setFocusable(true);
         field.setFocusableInTouchMode(true);
         field.setInputType(InputType.TYPE_CLASS_NUMBER);
         field.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2)});
         field.setSelectAllOnFocus(true);
-        field.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        // Avoid Samsung's extra check-mark/Done action beside the minute field.
+        field.setImeOptions(EditorInfo.IME_ACTION_NONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
 
         Runnable edit = () -> {
+            picker.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+            field.setFocusable(true);
+            field.setFocusableInTouchMode(true);
             field.requestFocus();
             field.selectAll();
             field.post(() -> {
@@ -468,34 +519,23 @@ public class QuickTodoActivity extends Activity {
                 if (keyboard != null) keyboard.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT);
             });
         };
-        field.setOnClickListener(v -> edit.run());
-
-        // NumberPicker intercepts touches on some Android versions. A quick tap
-        // in the selected (middle) row still opens the keyboard; a drag scrolls.
-        final float[] downY = {0f};
-        final long[] downTime = {0L};
-        picker.setOnTouchListener((v, event) -> {
-            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                downY[0] = event.getY();
-                downTime[0] = SystemClock.elapsedRealtime();
-            } else if (event.getActionMasked() == MotionEvent.ACTION_UP) {
-                float middle = picker.getHeight() / 2f;
-                if (Math.abs(downY[0] - middle) < dp(29)
-                        && Math.abs(event.getY() - downY[0]) < dp(12)
-                        && SystemClock.elapsedRealtime() - downTime[0] < 350L) {
-                    edit.run();
-                    return true;
-                }
-            }
-            return false;
+        ((TapToEditNumberPicker) picker).setOnCenterTap(edit);
+        field.setOnFocusChangeListener((view, hasFocus) -> {
+            if (!hasFocus) picker.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         });
+
         field.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
+            if (actionId == EditorInfo.IME_ACTION_DONE
+                    || actionId == EditorInfo.IME_ACTION_GO
+                    || actionId == EditorInfo.IME_NULL
+                    || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                        && event.getAction() == KeyEvent.ACTION_DOWN)) {
                 if (commitTimeEntry(field, picker, min, max, twoDigits)) {
                     InputMethodManager keyboard = (InputMethodManager)
                             getSystemService(Context.INPUT_METHOD_SERVICE);
                     if (keyboard != null) keyboard.hideSoftInputFromWindow(field.getWindowToken(), 0);
                     field.clearFocus();
+                    picker.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
                 }
                 return true;
             }

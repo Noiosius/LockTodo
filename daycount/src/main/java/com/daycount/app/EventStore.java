@@ -75,6 +75,27 @@ final class EventStore {
         }
     }
 
+
+    /**
+     * Move an existing event into the target event's position.
+     * Event identity and selected widget event are unchanged.
+     */
+    boolean move(long sourceId, long targetId) {
+        if (sourceId == targetId) return false;
+        List<Event> events = load();
+        int from = -1;
+        int to = -1;
+        for (int i = 0; i < events.size(); i++) {
+            if (events.get(i).id == sourceId) from = i;
+            if (events.get(i).id == targetId) to = i;
+        }
+        if (from < 0 || to < 0) return false;
+        Event moving = events.remove(from);
+        events.add(to, moving);
+        write(events);
+        return true;
+    }
+
     void select(long id) {
         prefs.edit().putLong(KEY_SELECTED_ID, id).apply();
     }

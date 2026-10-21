@@ -48,7 +48,7 @@ jobs:
           if-no-files-found: error
 
       - name: Build APKs
-        run: gradle --no-daemon :app:assembleRelease :batterycheck:assembleDebug :daycount:assembleDebug :quiethome:assembleDebug :widgetalign:assembleDebug :vibedrain:assembleDebug :igdm:assembleDebug
+        run: gradle --no-daemon :app:assembleRelease :batterycheck:assembleDebug :daycount:assembleRelease :quiethome:assembleDebug :widgetalign:assembleDebug :vibedrain:assembleDebug :igdm:assembleDebug
 
       - name: Upload unsigned LockTodo APK
         uses: actions/upload-artifact@v4
@@ -64,11 +64,11 @@ jobs:
           path: batterycheck/build/outputs/apk/debug/batterycheck-debug.apk
           if-no-files-found: error
 
-      - name: Upload Day Count APK
+      - name: Upload unsigned Day Count APK
         uses: actions/upload-artifact@v4
         with:
-          name: Day-Count-v0.3-apk
-          path: daycount/build/outputs/apk/debug/daycount-debug.apk
+          name: Day-Count-v0.4-unsigned-apk
+          path: daycount/build/outputs/apk/release/daycount-release-unsigned.apk
           if-no-files-found: error
 
       - name: Upload Quiet Home APK

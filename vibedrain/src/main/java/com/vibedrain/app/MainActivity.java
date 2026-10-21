@@ -20,20 +20,24 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class MainActivity extends Activity {
     private static final int REQUEST_NOTIFICATIONS = 4201;
+    private static final int REQUEST_MICROPHONE = 4202;
     private static final String SETUP_PREFS = "vibe_drain_setup";
     private static final String KEY_MOISTURE_SETUP_ASKED = "moisture_setup_asked_v1";
 
     private Button vibrationButton;
     private Button toneButton;
+    private Button clapButton;
     private Button singleModeButton;
     private Button drainModeButton;
 
     private TextView vibrationValue;
     private TextView frequencyValue;
     private TextView toneHint;
+    private TextView clapHint;
 
     private LinearLayout frequencyRow;
     private SeekBar frequencySeek;
@@ -44,6 +48,7 @@ public class MainActivity extends Activity {
     private boolean vibrationRunning = false;
     private boolean toneRunning = false;
     private boolean drainMode = true;
+    private boolean clapListening = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,6 +68,7 @@ public class MainActivity extends Activity {
         super.onResume();
         loadRuntimeState();
         refreshUiState();
+        refreshClapUi();
     }
 
     private void loadRuntimeState() {
@@ -124,14 +130,14 @@ public class MainActivity extends Activity {
         ));
 
         TextView title = new TextView(this);
-        title.setText("Vibe Drain");
+        title.setText("Vibe & Sound");
         title.setTextColor(Color.WHITE);
         title.setTextSize(23);
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         root.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("진동 · 단음 · 배수");
+        subtitle.setText("진동 · 단음 · 배수 · 박수로 찾기");
         subtitle.setTextColor(Color.rgb(125, 125, 125));
         subtitle.setTextSize(12);
         subtitle.setPadding(0, dp(3), 0, dp(20));
@@ -146,10 +152,16 @@ public class MainActivity extends Activity {
         speakerParams.topMargin = dp(14);
         root.addView(buildSpeakerCard(), speakerParams);
 
+        LinearLayout.LayoutParams clapParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clapParams.topMargin = dp(14);
+        root.addView(buildClapCard(), clapParams);
+
         TextView note = new TextView(this);
         note.setText(
-                "실행 중에는 화면을 끄거나 다른 앱으로 이동해도 계속 작동합니다.\n"
-                        + "소리 크기는 휴대폰 미디어 음량으로 조절하세요."
+                "박수 감지는 마이크를 계속 사용하므로 배터리가 소모됩니다.\n"
+                        + "알림은 30초 동안 작동하며 소리가 나면 미디어 음량을 최대로 올린 후 복구합니다.\n"
+                        + "화면을 꺼도 감지하지만 배터리 절약 설정이나 재부팅으로 중단될 수 있습니다."
         );
         note.setTextColor(Color.rgb(105, 105, 105));
         note.setTextSize(11);
@@ -316,6 +328,68 @@ public class MainActivity extends Activity {
 
         applySpeakerModeUi();
         return card;
+    }
+
+    private View buildClapCard() {
+        LinearLayout card = card();
+        card.addView(header("박수로 휴대폰 찾기"));
+
+        clapButton = actionButton("감지 시작");
+        clapButton.setOnClickListener(v -> toggleClap());
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        buttonParams.topMargin = dp(12);
+        card.addView(clapButton, buttonParams);
+
+        card.addView(hint("짝 · 짝짝  →  진동 30초"));
+        card.addView(hint("짝 · 짝짝짝  →  진동 + 소리 30초 (미디어 음량 최대로)"));
+        clapHint = hint("화면 꺼짐 상태에서도 감지 · 실행 시 마이크 사용");
+        card.addView(clapHint);
+        refreshClapUi();
+        return card;
+    }
+
+    private void refreshClapUi() {
+        clapListening = getSharedPreferences(ClapFindService.PREFS, MODE_PRIVATE)
+                .getBoolean(ClapFindService.KEY_ENABLED, false);
+        if (clapButton != null) {
+            clapButton.setText(clapListening ? "감지 중지" : "감지 시작");
+            applyButtonStyle(clapButton, clapListening);
+        }
+    }
+
+    private void toggleClap() {
+        if (clapListening) {
+            Intent stop = new Intent(this, ClapFindService.class);
+            stop.setAction(ClapFindService.ACTION_STOP);
+            startService(stop);
+            clapListening = false;
+            getSharedPreferences(ClapFindService.PREFS, MODE_PRIVATE)
+                    .edit().putBoolean(ClapFindService.KEY_ENABLED, false).apply();
+            refreshClapUi();
+            return;
+        }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_MICROPHONE);
+            return;
+        }
+        beginClapMonitoring();
+    }
+
+    private void beginClapMonitoring() {
+        Intent start = new Intent(this, ClapFindService.class);
+        start.setAction(ClapFindService.ACTION_START);
+        try {
+            // Start while this Activity is visible: required for Android 14+ microphone FGS.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(start);
+            else startService(start);
+            getSharedPreferences(ClapFindService.PREFS, MODE_PRIVATE)
+                    .edit().putBoolean(ClapFindService.KEY_ENABLED, true).apply();
+            refreshClapUi();
+        } catch (Throwable error) {
+            Toast.makeText(this, "마이크 감지를 시작할 수 없습니다.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void setSpeakerMode(boolean useDrainMode) {
@@ -640,6 +714,15 @@ public class MainActivity extends Activity {
                 permissions,
                 grantResults
         );
+        if (requestCode == REQUEST_MICROPHONE) {
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                beginClapMonitoring();
+            } else {
+                Toast.makeText(this, "박수 감지에는 마이크 권한이 필요합니다.", Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
         if (requestCode == REQUEST_NOTIFICATIONS) {
             getWindow().getDecorView().postDelayed(
                     this::openNotificationListenerSettings,

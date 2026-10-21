@@ -128,7 +128,7 @@ public class MoistureNotificationListener extends NotificationListenerService {
 
         builder.setSmallIcon(R.drawable.ic_water_alert)
                 .setContentTitle("수분 감지 알림")
-                .setContentText("Vibe Drain 열기")
+                .setContentText("Vibe & Sound 열기")
                 .setContentIntent(pending)
                 .setAutoCancel(true)
                 .setCategory(Notification.CATEGORY_RECOMMENDATION)
@@ -165,7 +165,7 @@ public class MoistureNotificationListener extends NotificationListenerService {
                 "수분 감지 바로가기",
                 NotificationManager.IMPORTANCE_HIGH
         );
-        channel.setDescription("삼성 수분·습기 경고 감지 시 Vibe Drain 바로가기 표시");
+        channel.setDescription("삼성 수분·습기 경고 감지 시 Vibe & Sound 바로가기 표시");
         channel.enableVibration(true);
         channel.setVibrationPattern(new long[]{0L, 120L, 90L, 120L});
         channel.setSound(null, null);

@@ -10,8 +10,8 @@ android {
         applicationId 'com.locktodo.app'
         minSdk 28
         targetSdk 33
-        versionCode 22
-        versionName '0.9.7'
+        versionCode 23
+        versionName '0.9.8'
     }
 
     buildTypes {

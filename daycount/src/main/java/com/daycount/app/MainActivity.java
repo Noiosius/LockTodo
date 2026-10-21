@@ -3,11 +3,14 @@ package com.daycount.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
+import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.DragEvent;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -165,7 +168,16 @@ public class MainActivity extends Activity {
         count.setTextSize(22);
         count.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         count.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        row.addView(count, new LinearLayout.LayoutParams(dp(105), ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(count, new LinearLayout.LayoutParams(dp(90), ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Keep the count visible and reserve the far right for reordering.
+        TextView reorderHandle = new TextView(this);
+        reorderHandle.setText("≡");
+        reorderHandle.setTextSize(24);
+        reorderHandle.setTextColor(Color.rgb(135, 135, 135));
+        reorderHandle.setGravity(Gravity.CENTER);
+        reorderHandle.setContentDescription("순서 변경: " + event.name);
+        row.addView(reorderHandle, new LinearLayout.LayoutParams(dp(42), dp(48)));
 
         row.setOnClickListener(v -> {
             store.select(event.id);
@@ -185,6 +197,45 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         wrapper.addView(separator, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+
+        // Match LockTodo's right-hand reorder handle: drag only by the handle.
+        reorderHandle.setOnTouchListener((view, eventTouch) -> {
+            if (eventTouch.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                ClipData data = ClipData.newPlainText("daycount_event", String.valueOf(event.id));
+                return view.startDragAndDrop(data, new View.DragShadowBuilder(wrapper),
+                        event.id, 0);
+            }
+            return true;
+        });
+
+        wrapper.setOnDragListener((view, drag) -> {
+            switch (drag.getAction()) {
+                case DragEvent.ACTION_DRAG_STARTED:
+                    return drag.getLocalState() instanceof Long;
+                case DragEvent.ACTION_DRAG_ENTERED:
+                    view.setAlpha(0.5f);
+                    return true;
+                case DragEvent.ACTION_DRAG_EXITED:
+                    view.setAlpha(1f);
+                    return true;
+                case DragEvent.ACTION_DROP:
+                    view.setAlpha(1f);
+                    if (drag.getLocalState() instanceof Long) {
+                        long sourceId = (Long) drag.getLocalState();
+                        if (store.move(sourceId, event.id)) {
+                            DayCountWidget.updateAll(MainActivity.this);
+                            refreshList();
+                        }
+                        return true;
+                    }
+                    return false;
+                case DragEvent.ACTION_DRAG_ENDED:
+                    view.setAlpha(1f);
+                    return true;
+                default:
+                    return true;
+            }
+        });
         return wrapper;
     }
 

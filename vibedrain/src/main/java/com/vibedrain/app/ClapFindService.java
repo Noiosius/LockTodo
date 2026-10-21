@@ -106,6 +106,7 @@ public class ClapFindService extends Service {
         // No background restart: Android 14+ prohibits starting a microphone
         // foreground service from a boot receiver or background process.
         if (!ACTION_START.equals(action)) {
+            stopListening();
             stopSelf();
             return START_NOT_STICKY;
         }

@@ -48,7 +48,7 @@ jobs:
           if-no-files-found: error
 
       - name: Build APKs
-        run: gradle --no-daemon :app:assembleRelease :batterycheck:assembleDebug :daycount:assembleRelease :quiethome:assembleDebug :widgetalign:assembleDebug :vibedrain:assembleDebug :igdm:assembleDebug
+        run: gradle --no-daemon :app:assembleRelease :batterycheck:assembleDebug :daycount:assembleRelease :quiethome:assembleDebug :widgetalign:assembleDebug :vibedrain:assembleRelease :igdm:assembleDebug
 
       - name: Upload unsigned LockTodo APK
         uses: actions/upload-artifact@v4
@@ -85,11 +85,11 @@ jobs:
           path: widgetalign/build/outputs/apk/debug/widgetalign-debug.apk
           if-no-files-found: error
 
-      - name: Upload Vibe Drain APK
+      - name: Upload unsigned Vibe & Sound APK
         uses: actions/upload-artifact@v4
         with:
-          name: Vibe-Drain-v0.7-apk
-          path: vibedrain/build/outputs/apk/debug/vibedrain-debug.apk
+          name: Vibe-and-Sound-v0.8-unsigned-apk
+          path: vibedrain/build/outputs/apk/release/vibedrain-release-unsigned.apk
           if-no-files-found: error
 
       - name: Upload IG DM APK

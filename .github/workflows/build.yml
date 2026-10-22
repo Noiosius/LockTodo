@@ -88,7 +88,7 @@ jobs:
       - name: Upload unsigned Vibe & Sound APK
         uses: actions/upload-artifact@v4
         with:
-          name: Vibe-and-Sound-v0.8.3-unsigned-apk
+          name: Vibe-and-Sound-v0.8.4-unsigned-apk
           path: vibedrain/build/outputs/apk/release/vibedrain-release-unsigned.apk
           if-no-files-found: error
 

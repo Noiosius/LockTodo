@@ -102,7 +102,7 @@ public class DrainForegroundService extends Service {
             }
             // Vibration follows a separate, precomputed smooth looping waveform.
             // Pitch destinations change irregularly; neither output is restarted.
-            randomHandler.postDelayed(this, 1600L + random.nextInt(1900));
+            randomHandler.postDelayed(this, 350L + random.nextInt(501));
         }
     };
 
@@ -825,9 +825,9 @@ public class DrainForegroundService extends Service {
             short[] buffer = new short[1024];
             double phase = 0.0;
             double glidingFrequency = frequency;
-            // ~0.35-second smoothing time constant; target changes can
+            // ~0.10-second smoothing time constant; target changes can
             // overlap without instantaneous jumps in the sound frequency.
-            final double pitchGlide = 1.0 / (SAMPLE_RATE * 0.35);
+            final double pitchGlide = 1.0 / (SAMPLE_RATE * 0.10);
             long sampleIndex = 0L;
 
             final double sweepSamples =

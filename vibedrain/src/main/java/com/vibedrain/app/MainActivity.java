@@ -28,6 +28,7 @@ public class MainActivity extends Activity {
 
     private Button vibrationButton;
     private Button toneButton;
+    private Button randomButton;
     private Button singleModeButton;
     private Button drainModeButton;
 
@@ -44,6 +45,7 @@ public class MainActivity extends Activity {
     private boolean vibrationRunning = false;
     private boolean toneRunning = false;
     private boolean drainMode = true;
+    private boolean randomRunning = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -88,6 +90,10 @@ public class MainActivity extends Activity {
         );
         toneRunning = prefs.getBoolean(
                 DrainForegroundService.KEY_TONE_RUNNING,
+                false
+        );
+        randomRunning = prefs.getBoolean(
+                DrainForegroundService.KEY_RANDOM_RUNNING,
                 false
         );
     }
@@ -145,6 +151,13 @@ public class MainActivity extends Activity {
         );
         speakerParams.topMargin = dp(14);
         root.addView(buildSpeakerCard(), speakerParams);
+
+        LinearLayout.LayoutParams randomParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        randomParams.topMargin = dp(14);
+        root.addView(buildRandomCard(), randomParams);
 
         TextView note = new TextView(this);
         note.setText(
@@ -318,6 +331,42 @@ public class MainActivity extends Activity {
         return card;
     }
 
+    private View buildRandomCard() {
+        LinearLayout card = card();
+        card.addView(header("랜덤"));
+
+        randomButton = actionButton(randomRunning ? "랜덤 정지" : "랜덤 시작");
+        applyButtonStyle(randomButton, randomRunning);
+        randomButton.setOnClickListener(v -> toggleRandom());
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        params.topMargin = dp(12);
+        card.addView(randomButton, params);
+
+        card.addView(hint("진동 세기 5–100% · 단음 주파수 120–240 Hz"));
+        card.addView(hint("약 0.3–0.9초마다 불규칙하게 변경 · 다시 누르면 정지"));
+        return card;
+    }
+
+    private void toggleRandom() {
+        Intent intent = serviceIntent(
+                randomRunning
+                        ? DrainForegroundService.ACTION_STOP_RANDOM
+                        : DrainForegroundService.ACTION_START_RANDOM
+        );
+        if (randomRunning) {
+            startService(intent);
+        } else {
+            startOutputService(intent);
+        }
+        randomRunning = !randomRunning;
+        getSharedPreferences(DrainForegroundService.STATE_PREFS, MODE_PRIVATE)
+                .edit().putBoolean(DrainForegroundService.KEY_RANDOM_RUNNING, randomRunning)
+                .apply();
+        refreshUiState();
+    }
+
     private void setSpeakerMode(boolean useDrainMode) {
         drainMode = useDrainMode;
         persistControls();
@@ -375,6 +424,23 @@ public class MainActivity extends Activity {
             toneButton.setText(toneRunning ? "정지" : "시작");
             applyButtonStyle(toneButton, toneRunning);
         }
+
+        if (randomButton != null) {
+            randomButton.setText(randomRunning ? "랜덤 정지" : "랜덤 시작");
+            applyButtonStyle(randomButton, randomRunning);
+        }
+
+        // Manual controls return to their former state when random is stopped.
+        if (vibrationButton != null) {
+            vibrationButton.setEnabled(!randomRunning);
+            vibrationButton.setAlpha(randomRunning ? 0.5f : 1f);
+        }
+        if (toneButton != null) {
+            toneButton.setEnabled(!randomRunning);
+            toneButton.setAlpha(randomRunning ? 0.5f : 1f);
+        }
+        if (singleModeButton != null) singleModeButton.setEnabled(!randomRunning);
+        if (drainModeButton != null) drainModeButton.setEnabled(!randomRunning);
 
         applySpeakerModeUi();
     }

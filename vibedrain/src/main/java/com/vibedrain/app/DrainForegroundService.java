@@ -24,6 +24,7 @@ import android.os.Vibrator;
 import android.os.VibratorManager;
 
 import java.util.Random;
+import java.util.ArrayList;
 
 public class DrainForegroundService extends Service {
     public static final String ACTION_START_VIBRATION =
@@ -93,16 +94,15 @@ public class DrainForegroundService extends Service {
         @Override
         public void run() {
             if (!randomRunning) return;
-            vibrationStrength = 5 + random.nextInt(96);
             toneFrequency = 120 + random.nextInt(121);
-            drainMode = false;
-            if (vibrationRunning) startVibrationInternal();
             if (toneRunning) {
-                toneEngine.setDrainMode(false);
+                // Update only the destination pitch. ToneEngine glides toward it
+                // sample-by-sample without stopping or recreating AudioTrack.
                 toneEngine.setFrequency(toneFrequency);
             }
-            // Change both values at irregular intervals, even with screen off.
-            randomHandler.postDelayed(this, 260L + random.nextInt(640));
+            // Vibration follows a separate, precomputed smooth looping waveform.
+            // Pitch destinations change irregularly; neither output is restarted.
+            randomHandler.postDelayed(this, 1600L + random.nextInt(1900));
         }
     };
 
@@ -259,10 +259,78 @@ public class DrainForegroundService extends Service {
         vibrationRunning = true;
         toneRunning = true;
         drainMode = false;
-        startVibrationInternal();
+        toneEngine.setSmoothMode(true);
+        startSmoothRandomVibration();
         startToneInternal();
         randomHandler.removeCallbacks(randomStep);
         randomStep.run();
+    }
+
+
+    /**
+     * A repeating amplitude envelope avoids cancel()/vibrate() on every random
+     * update, which caused the physical motor to stop between changes.
+     * Each segment smoothly approaches an independently chosen target.
+     * The final segment returns to the first amplitude, so the loop has
+     * no discontinuity at its repeat boundary.
+     */
+    private void startSmoothRandomVibration() {
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            vibrationRunning = false;
+            return;
+        }
+        AudioAttributes attributes = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build();
+        if (!vibrator.hasAmplitudeControl()) {
+            // No proportional control available on this vibrator.
+            // Use a steady, uninterrupted waveform rather than restarting.
+            try {
+                vibrator.cancel();
+                vibrator.vibrate(VibrationEffect.createWaveform(
+                        new long[]{0L, 1000L}, 1), attributes);
+            } catch (Throwable ignored) {
+                vibrationRunning = false;
+            }
+            return;
+        }
+
+        final int durationPerStep = 50;
+        final ArrayList<Long> durations = new ArrayList<>();
+        final ArrayList<Integer> amplitudes = new ArrayList<>();
+        durations.add(0L);
+        amplitudes.add(0);
+
+        final int first = 60 + random.nextInt(145);
+        int current = first;
+        for (int segment = 0; segment <= 26; segment++) {
+            int target = segment == 26 ? first : 20 + random.nextInt(235);
+            int steps = 28 + random.nextInt(38);
+            for (int step = 1; step <= steps; step++) {
+                double t = (double) step / steps;
+                double eased = t * t * (3.0 - 2.0 * t);
+                int amplitude = (int) Math.round(current + (target - current) * eased);
+                durations.add((long) durationPerStep);
+                amplitudes.add(Math.max(1, Math.min(255, amplitude)));
+            }
+            current = target;
+        }
+
+        long[] timing = new long[durations.size()];
+        int[] strength = new int[amplitudes.size()];
+        for (int i = 0; i < timing.length; i++) {
+            timing[i] = durations.get(i);
+            strength[i] = amplitudes.get(i);
+        }
+        try {
+            vibrator.cancel();
+            // Repeat from index 1; index 0 is the initial zero-duration delay.
+            vibrator.vibrate(VibrationEffect.createWaveform(timing, strength, 1),
+                    attributes);
+        } catch (Throwable ignored) {
+            vibrationRunning = false;
+        }
     }
 
     private void stopRandom(boolean restoreManualOutputs) {
@@ -271,6 +339,7 @@ public class DrainForegroundService extends Service {
         randomHandler.removeCallbacks(randomStep);
         stopVibration();
         stopTone();
+        toneEngine.setSmoothMode(false);
 
         vibrationStrength = previousStrength;
         toneFrequency = previousFrequency;
@@ -660,6 +729,7 @@ public class DrainForegroundService extends Service {
         private final AudioManager audioManager;
 
         private volatile double frequency = 165.0;
+        private volatile boolean smoothMode = false;
         private volatile boolean drainMode = true;
         private volatile boolean running = false;
 
@@ -684,6 +754,10 @@ public class DrainForegroundService extends Service {
 
         void setDrainMode(boolean drainMode) {
             this.drainMode = drainMode;
+        }
+
+        void setSmoothMode(boolean enabled) {
+            this.smoothMode = enabled;
         }
 
         boolean isRunning() {
@@ -750,6 +824,10 @@ public class DrainForegroundService extends Service {
         private void audioLoop() {
             short[] buffer = new short[1024];
             double phase = 0.0;
+            double glidingFrequency = frequency;
+            // ~0.35-second smoothing time constant; target changes can
+            // overlap without instantaneous jumps in the sound frequency.
+            final double pitchGlide = 1.0 / (SAMPLE_RATE * 0.35);
             long sampleIndex = 0L;
 
             final double sweepSamples =
@@ -784,7 +862,11 @@ public class DrainForegroundService extends Service {
                                                 - DRAIN_MIN_HZ
                                 )
                                 * triangle;
+                    } else if (smoothMode) {
+                        glidingFrequency += (frequency - glidingFrequency) * pitchGlide;
+                        f = glidingFrequency;
                     } else {
+                        glidingFrequency = frequency;
                         f = frequency;
                     }
 

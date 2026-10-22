@@ -346,7 +346,7 @@ public class MainActivity extends Activity {
 
         card.addView(hint("진동 세기 5–100% · 단음 주파수 120–240 Hz"));
         card.addView(hint("진동 세기는 끊김 없이 서서히 변화 · 주파수는 부드럽게 이동"));
-        card.addView(hint("목표 주파수는 약 1.6–3.5초마다 변경 · 다시 누르면 정지"));
+        card.addView(hint("목표 주파수는 약 0.35–0.85초마다 변경 · 다시 누르면 정지"));
         return card;
     }
 

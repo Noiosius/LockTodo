@@ -15,9 +15,7 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.os.Build;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
 import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -88,23 +86,7 @@ public class DrainForegroundService extends Service {
     private boolean previousDrainMode;
     private int previousStrength;
     private int previousFrequency;
-    private final Handler randomHandler = new Handler(Looper.getMainLooper());
     private final Random random = new Random();
-    private final Runnable randomStep = new Runnable() {
-        @Override
-        public void run() {
-            if (!randomRunning) return;
-            toneFrequency = 120 + random.nextInt(121);
-            if (toneRunning) {
-                // Update only the destination pitch. ToneEngine glides toward it
-                // sample-by-sample without stopping or recreating AudioTrack.
-                toneEngine.setFrequency(toneFrequency);
-            }
-            // Vibration follows a separate, precomputed smooth looping waveform.
-            // Pitch destinations change irregularly; neither output is restarted.
-            randomHandler.postDelayed(this, 350L + random.nextInt(501));
-        }
-    };
 
     @Override
     public void onCreate() {
@@ -259,11 +241,9 @@ public class DrainForegroundService extends Service {
         vibrationRunning = true;
         toneRunning = true;
         drainMode = false;
-        toneEngine.setSmoothMode(true);
+        toneEngine.setRandomSweepMode(true);
         startSmoothRandomVibration();
         startToneInternal();
-        randomHandler.removeCallbacks(randomStep);
-        randomStep.run();
     }
 
 
@@ -336,10 +316,9 @@ public class DrainForegroundService extends Service {
     private void stopRandom(boolean restoreManualOutputs) {
         if (!randomRunning) return;
         randomRunning = false;
-        randomHandler.removeCallbacks(randomStep);
         stopVibration();
         stopTone();
-        toneEngine.setSmoothMode(false);
+        toneEngine.setRandomSweepMode(false);
 
         vibrationStrength = previousStrength;
         toneFrequency = previousFrequency;
@@ -557,7 +536,7 @@ public class DrainForegroundService extends Service {
                         )
                         : new Notification.Builder(this);
 
-        builder.setSmallIcon(R.drawable.ic_water_alert)
+        builder.setSmallIcon(R.drawable.ic_vibration_notification)
                 .setContentTitle("Vibe & Sound 실행 중")
                 .setContentText(statusText())
                 .setContentIntent(openPending)
@@ -582,7 +561,7 @@ public class DrainForegroundService extends Service {
 
         if (vibrationRunning && toneRunning) {
             return drainMode
-                    ? "진동 · 배수 실행 중"
+                    ? "진동 · 반복 실행 중"
                     : "진동 · 단음 "
                             + toneFrequency
                             + " Hz 실행 중";
@@ -594,7 +573,7 @@ public class DrainForegroundService extends Service {
 
         if (toneRunning) {
             return drainMode
-                    ? "배수 실행 중"
+                    ? "반복 실행 중"
                     : "단음 "
                             + toneFrequency
                             + " Hz 실행 중";
@@ -622,7 +601,7 @@ public class DrainForegroundService extends Service {
                         NotificationManager.IMPORTANCE_LOW
                 );
         channel.setDescription(
-                "화면이 꺼져도 진동과 배수를 계속 실행하기 위한 알림"
+                "화면이 꺼져도 진동과 반복 소리를 계속 실행하기 위한 알림"
         );
         channel.setSound(null, null);
         channel.enableVibration(false);
@@ -729,7 +708,7 @@ public class DrainForegroundService extends Service {
         private final AudioManager audioManager;
 
         private volatile double frequency = 165.0;
-        private volatile boolean smoothMode = false;
+        private volatile boolean randomSweepMode = false;
         private volatile boolean drainMode = true;
         private volatile boolean running = false;
 
@@ -756,8 +735,8 @@ public class DrainForegroundService extends Service {
             this.drainMode = drainMode;
         }
 
-        void setSmoothMode(boolean enabled) {
-            this.smoothMode = enabled;
+        void setRandomSweepMode(boolean enabled) {
+            this.randomSweepMode = enabled;
         }
 
         boolean isRunning() {
@@ -824,11 +803,19 @@ public class DrainForegroundService extends Service {
         private void audioLoop() {
             short[] buffer = new short[1024];
             double phase = 0.0;
-            double glidingFrequency = frequency;
-            // ~0.10-second smoothing time constant; target changes can
-            // overlap without instantaneous jumps in the sound frequency.
-            final double pitchGlide = 1.0 / (SAMPLE_RATE * 0.10);
             long sampleIndex = 0L;
+
+            // Each sweep alternates between an independently randomized
+            // low and high endpoint. Duration is also freshly randomized.
+            // Calculating the ramp within the existing AudioTrack loop
+            // keeps playback continuous, even across turning points.
+            Random sweepRandom = new Random();
+            double sweepFrom = 150.0;
+            double sweepTo = 190.0 + sweepRandom.nextInt(51);
+            boolean nextIsHigh = false;
+            long sweepLength = SAMPLE_RATE * (350L + sweepRandom.nextInt(501)) / 1000L;
+            long sweepPosition = 0L;
+            boolean wasRandomSweep = false;
 
             final double sweepSamples =
                     SAMPLE_RATE * DRAIN_SWEEP_SECONDS;
@@ -843,7 +830,33 @@ public class DrainForegroundService extends Service {
                 ) {
                     double f;
 
-                    if (drain) {
+                    if (randomSweepMode) {
+                        if (!wasRandomSweep) {
+                            // Start close to the last selected frequency.
+                            sweepFrom = Math.max(120.0, Math.min(240.0, frequency));
+                            sweepTo = 190.0 + sweepRandom.nextInt(51);
+                            nextIsHigh = false;
+                            sweepLength = SAMPLE_RATE
+                                    * (350L + sweepRandom.nextInt(501)) / 1000L;
+                            sweepPosition = 0L;
+                            wasRandomSweep = true;
+                        }
+                        if (sweepPosition >= sweepLength) {
+                            sweepFrom = sweepTo;
+                            sweepTo = nextIsHigh
+                                    ? 190.0 + sweepRandom.nextInt(51)
+                                    : 120.0 + sweepRandom.nextInt(46);
+                            nextIsHigh = !nextIsHigh;
+                            sweepLength = SAMPLE_RATE
+                                    * (350L + sweepRandom.nextInt(501)) / 1000L;
+                            sweepPosition = 0L;
+                        }
+                        double ratio = (double) sweepPosition / sweepLength;
+                        double eased = ratio * ratio * (3.0 - 2.0 * ratio);
+                        f = sweepFrom + (sweepTo - sweepFrom) * eased;
+                        sweepPosition++;
+                    } else if (drain) {
+                        wasRandomSweep = false;
                         double cycle =
                                 (sampleIndex
                                         % (long) (
@@ -862,11 +875,8 @@ public class DrainForegroundService extends Service {
                                                 - DRAIN_MIN_HZ
                                 )
                                 * triangle;
-                    } else if (smoothMode) {
-                        glidingFrequency += (frequency - glidingFrequency) * pitchGlide;
-                        f = glidingFrequency;
                     } else {
-                        glidingFrequency = frequency;
+                        wasRandomSweep = false;
                         f = frequency;
                     }
 

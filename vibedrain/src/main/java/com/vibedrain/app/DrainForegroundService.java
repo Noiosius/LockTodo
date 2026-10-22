@@ -15,11 +15,15 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
+
+import java.util.Random;
 
 public class DrainForegroundService extends Service {
     public static final String ACTION_START_VIBRATION =
@@ -37,6 +41,10 @@ public class DrainForegroundService extends Service {
             "com.vibedrain.app.UPDATE_TONE";
     public static final String ACTION_STOP_ALL =
             "com.vibedrain.app.STOP_ALL";
+    public static final String ACTION_START_RANDOM =
+            "com.vibedrain.app.START_RANDOM";
+    public static final String ACTION_STOP_RANDOM =
+            "com.vibedrain.app.STOP_RANDOM";
 
     public static final String EXTRA_VIBRATION_STRENGTH =
             "vibration_strength";
@@ -57,6 +65,7 @@ public class DrainForegroundService extends Service {
             "tone_frequency";
     public static final String KEY_DRAIN_MODE =
             "drain_mode";
+    public static final String KEY_RANDOM_RUNNING = "random_running";
 
     private static final String CHANNEL_ID =
             "vibe_drain_running";
@@ -72,6 +81,30 @@ public class DrainForegroundService extends Service {
     private int vibrationStrength = 100;
     private int toneFrequency = 165;
     private boolean drainMode = true;
+    private boolean randomRunning;
+    private boolean previousVibrationRunning;
+    private boolean previousToneRunning;
+    private boolean previousDrainMode;
+    private int previousStrength;
+    private int previousFrequency;
+    private final Handler randomHandler = new Handler(Looper.getMainLooper());
+    private final Random random = new Random();
+    private final Runnable randomStep = new Runnable() {
+        @Override
+        public void run() {
+            if (!randomRunning) return;
+            vibrationStrength = 5 + random.nextInt(96);
+            toneFrequency = 120 + random.nextInt(121);
+            drainMode = false;
+            if (vibrationRunning) startVibrationInternal();
+            if (toneRunning) {
+                toneEngine.setDrainMode(false);
+                toneEngine.setFrequency(toneFrequency);
+            }
+            // Change both values at irregular intervals, even with screen off.
+            randomHandler.postDelayed(this, 260L + random.nextInt(640));
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -126,6 +159,30 @@ public class DrainForegroundService extends Service {
 
         String action = intent.getAction();
 
+        if (ACTION_START_RANDOM.equals(action)) {
+            startRandom();
+        } else if (ACTION_STOP_RANDOM.equals(action)) {
+            stopRandom(true);
+        } else {
+            if (randomRunning) stopRandom(true);
+            handleNormalAction(action, intent);
+        }
+
+        saveState();
+        updateWakeLock();
+
+        if (isAnythingRunning()) {
+            ensureForeground();
+            updateNotification();
+            return START_STICKY;
+        }
+
+        stopForeground(true);
+        stopSelf();
+        return START_NOT_STICKY;
+    }
+
+    private void handleNormalAction(String action, Intent intent) {
         if (ACTION_START_VIBRATION.equals(action)) {
             vibrationStrength = clamp(
                     intent.getIntExtra(
@@ -187,19 +244,41 @@ public class DrainForegroundService extends Service {
             stopVibration();
             stopTone();
         }
+    }
 
-        saveState();
-        updateWakeLock();
+    private void startRandom() {
+        if (randomRunning) return;
+        previousVibrationRunning = vibrationRunning;
+        previousToneRunning = toneRunning;
+        previousStrength = vibrationStrength;
+        previousFrequency = toneFrequency;
+        previousDrainMode = drainMode;
 
-        if (isAnythingRunning()) {
-            ensureForeground();
-            updateNotification();
-            return START_STICKY;
+        randomRunning = true;
+        ensureForeground();
+        vibrationRunning = true;
+        toneRunning = true;
+        drainMode = false;
+        startVibrationInternal();
+        startToneInternal();
+        randomHandler.removeCallbacks(randomStep);
+        randomStep.run();
+    }
+
+    private void stopRandom(boolean restoreManualOutputs) {
+        if (!randomRunning) return;
+        randomRunning = false;
+        randomHandler.removeCallbacks(randomStep);
+        stopVibration();
+        stopTone();
+
+        vibrationStrength = previousStrength;
+        toneFrequency = previousFrequency;
+        drainMode = previousDrainMode;
+        if (restoreManualOutputs) {
+            if (previousVibrationRunning) startVibration();
+            if (previousToneRunning) startTone();
         }
-
-        stopForeground(true);
-        stopSelf();
-        return START_NOT_STICKY;
     }
 
     private void restoreAfterProcessRestart() {
@@ -223,6 +302,15 @@ public class DrainForegroundService extends Service {
                 KEY_DRAIN_MODE,
                 true
         );
+
+        if (prefs.getBoolean(KEY_RANDOM_RUNNING, false)) {
+            // The persisted controls are the manual values from before random.
+            startRandom();
+            saveState();
+            updateWakeLock();
+            updateNotification();
+            return;
+        }
 
         if (!isAnythingRunning()) {
             stopSelf();
@@ -421,6 +509,8 @@ public class DrainForegroundService extends Service {
     }
 
     private String statusText() {
+        if (randomRunning) return "랜덤 · 진동 세기와 주파수 변경 중";
+
         if (vibrationRunning && toneRunning) {
             return drainMode
                     ? "진동 · 배수 실행 중"
@@ -494,26 +584,17 @@ public class DrainForegroundService extends Service {
 
     private void saveState() {
         prefs.edit()
-                .putBoolean(
-                        KEY_VIBRATION_RUNNING,
-                        vibrationRunning
-                )
-                .putBoolean(
-                        KEY_TONE_RUNNING,
-                        toneRunning
-                )
-                .putInt(
-                        KEY_VIBRATION_STRENGTH,
-                        vibrationStrength
-                )
-                .putInt(
-                        KEY_TONE_FREQUENCY,
-                        toneFrequency
-                )
-                .putBoolean(
-                        KEY_DRAIN_MODE,
-                        drainMode
-                )
+                .putBoolean(KEY_RANDOM_RUNNING, randomRunning)
+                .putBoolean(KEY_VIBRATION_RUNNING,
+                        randomRunning ? previousVibrationRunning : vibrationRunning)
+                .putBoolean(KEY_TONE_RUNNING,
+                        randomRunning ? previousToneRunning : toneRunning)
+                .putInt(KEY_VIBRATION_STRENGTH,
+                        randomRunning ? previousStrength : vibrationStrength)
+                .putInt(KEY_TONE_FREQUENCY,
+                        randomRunning ? previousFrequency : toneFrequency)
+                .putBoolean(KEY_DRAIN_MODE,
+                        randomRunning ? previousDrainMode : drainMode)
                 .apply();
     }
 
@@ -547,6 +628,7 @@ public class DrainForegroundService extends Service {
 
     @Override
     public void onDestroy() {
+        stopRandom(false);
         stopVibration();
         stopTone();
 

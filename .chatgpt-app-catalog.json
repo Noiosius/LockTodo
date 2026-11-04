@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "description": "ChatGPT conversation app selection menu. Removing an app here hides only its menu entry; does not delete source code or installed APKs.",
+  "items": [
+    {
+      "id": "locktodo",
+      "label": "LockTodo",
+      "module": "app",
+      "visible": true
+    },
+    {
+      "id": "daycount",
+      "label": "Day Count",
+      "module": "daycount",
+      "visible": true
+    },
+    {
+      "id": "vibesound",
+      "label": "Vibe & Sound",
+      "module": "vibedrain",
+      "visible": true
+    },
+    {
+      "id": "igdm",
+      "label": "Instagram DM",
+      "module": "igdm",
+      "visible": true
+    },
+    {
+      "id": "batterycheck",
+      "label": "Battery Check",
+      "module": "batterycheck",
+      "visible": true
+    },
+    {
+      "id": "quiethome",
+      "label": "Quiet Home",
+      "module": "quiethome",
+      "visible": true
+    },
+    {
+      "id": "widgetalign",
+      "label": "Widget Align",
+      "module": "widgetalign",
+      "visible": true
+    }
+  ]
+}

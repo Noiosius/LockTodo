@@ -38,7 +38,6 @@ public class TodoReaderActivity extends Activity {
         SharedPreferences prefs = AppPrefs.get(this);
         boolean light = prefs.getBoolean(AppPrefs.KEY_LIGHT_TEXT, true);
         int fg = light ? Color.WHITE : Color.BLACK;
-        int secondary = light ? Color.rgb(175, 175, 175) : Color.rgb(105, 105, 105);
         int bg = light ? Color.argb(235, 25, 25, 27) : Color.argb(245, 247, 247, 247);
 
         Window window = getWindow();
@@ -48,16 +47,12 @@ public class TodoReaderActivity extends Activity {
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(14), dp(9), dp(8), dp(8));
+        box.setPadding(dp(14), dp(6), dp(14), dp(6));
         GradientDrawable panel = new GradientDrawable();
         panel.setColor(bg);
         panel.setCornerRadius(dp(16));
         panel.setStroke(dp(1), light ? Color.argb(72, 255, 255, 255) : Color.argb(58, 0, 0, 0));
         box.setBackground(panel);
-
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
 
         HorizontalScrollView slider = new HorizontalScrollView(this);
         slider.setHorizontalScrollBarEnabled(false);
@@ -70,29 +65,11 @@ public class TodoReaderActivity extends Activity {
         task.setTextSize(prefs.getInt(AppPrefs.KEY_TEXT_SIZE, 16));
         task.setSingleLine(true);
         task.setGravity(Gravity.CENTER_VERTICAL);
-        task.setPadding(dp(3), 0, dp(30), 0);
+        task.setPadding(dp(3), 0, dp(16), 0);
         slider.addView(task, new HorizontalScrollView.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(46)));
-        row.addView(slider, new LinearLayout.LayoutParams(0, dp(46), 1f));
-
-        TextView close = new TextView(this);
-        close.setText("×");
-        close.setTextColor(fg);
-        close.setTextSize(24);
-        close.setGravity(Gravity.CENTER);
-        close.setContentDescription("닫기");
-        close.setOnClickListener(v -> finish());
-        row.addView(close, new LinearLayout.LayoutParams(dp(35), dp(46)));
-
-        box.addView(row);
-
-        TextView hint = new TextView(this);
-        hint.setText("← 좌우로 밀어서 전체 내용 보기 →");
-        hint.setTextColor(secondary);
-        hint.setTextSize(11);
-        hint.setGravity(Gravity.CENTER);
-        box.addView(hint, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(24)));
+        box.addView(slider, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(46)));
 
         setContentView(box);
         DisplayMetrics dm = getResources().getDisplayMetrics();

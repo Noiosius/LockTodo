@@ -24,7 +24,7 @@
       "id": "igdm",
       "label": "Instagram DM",
       "module": "igdm",
-      "visible": true
+      "visible": false
     },
     {
       "id": "batterycheck",
@@ -36,13 +36,13 @@
       "id": "quiethome",
       "label": "Quiet Home",
       "module": "quiethome",
-      "visible": true
+      "visible": false
     },
     {
       "id": "widgetalign",
       "label": "Widget Align",
       "module": "widgetalign",
-      "visible": true
+      "visible": false
     }
   ]
 }

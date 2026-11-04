@@ -21,6 +21,7 @@ import java.util.List;
 public class LockTodoWidget extends AppWidgetProvider {
     static final String ACTION_COMPLETE = "com.locktodo.app.ACTION_COMPLETE";
     static final String ACTION_EDIT = "com.locktodo.app.ACTION_EDIT";
+    static final String ACTION_READ_TEXT = "com.locktodo.app.ACTION_READ_TEXT";
     static final String ACTION_REORDER = "com.locktodo.app.ACTION_REORDER";
     static final String ACTION_ADD = "com.locktodo.app.ACTION_ADD";
     static final String EXTRA_INDEX = "index";
@@ -51,6 +52,18 @@ public class LockTodoWidget extends AppWidgetProvider {
         if (ACTION_ADD.equals(action)) {
             if (isConfirmedDoubleTap(context, ACTION_ADD, -1)) {
                 openQuickTodo(context, -1);
+            }
+            return;
+        }
+
+        if (ACTION_READ_TEXT.equals(action)) {
+            int index = intent.getIntExtra(EXTRA_INDEX, -1);
+            List<String> items = new TodoStore(context).load();
+            if (index >= 0 && index < items.size()) {
+                Intent reader = new Intent(context, TodoReaderActivity.class);
+                reader.putExtra(TodoReaderActivity.EXTRA_INDEX, index);
+                reader.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(reader);
             }
             return;
         }

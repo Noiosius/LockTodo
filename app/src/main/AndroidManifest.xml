@@ -35,6 +35,14 @@
             android:theme="@style/Theme.LockTodo.Dialog" />
 
         <activity
+            android:name=".TodoReaderActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:theme="@style/Theme.LockTodo.Dialog" />
+
+        <activity
             android:name=".ReorderActivity"
             android:excludeFromRecents="true"
             android:exported="false"

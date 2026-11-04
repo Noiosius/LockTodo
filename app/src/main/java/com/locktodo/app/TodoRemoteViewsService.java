@@ -4,6 +4,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
+import android.appwidget.AppWidgetManager;
+import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.RemoteViews;
@@ -15,17 +19,19 @@ import java.util.List;
 public class TodoRemoteViewsService extends RemoteViewsService {
     @Override
     public RemoteViewsFactory onGetViewFactory(Intent intent) {
-        return new Factory(getApplicationContext());
+        return new Factory(getApplicationContext(), intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID));
     }
 
     private static final class Factory implements RemoteViewsFactory {
         private final Context context;
+        private final int appWidgetId;
         private List<String> items = new ArrayList<>();
         private List<Long> reminders = new ArrayList<>();
         private SharedPreferences prefs;
 
-        Factory(Context context) {
+        Factory(Context context, int appWidgetId) {
             this.context = context;
+            this.appWidgetId = appWidgetId;
         }
 
         @Override public void onCreate() {
@@ -67,18 +73,24 @@ public class TodoRemoteViewsService extends RemoteViewsService {
             views.setTextViewText(R.id.todo_check, position == checkingIndex ? "●" : "○");
             views.setTextViewText(R.id.todo_clock, "◷");
             views.setTextViewText(R.id.todo_handle, "≡");
+            views.setTextViewText(R.id.todo_read_more, "↔");
             views.setTextColor(R.id.todo_text, textColor);
             views.setTextColor(R.id.todo_check, checkColor);
             views.setTextColor(R.id.todo_clock, clockColor);
             views.setTextColor(R.id.todo_handle, handleColor);
+            views.setTextColor(R.id.todo_read_more, handleColor);
             views.setTextViewTextSize(R.id.todo_text, TypedValue.COMPLEX_UNIT_SP, textSize);
             views.setTextViewTextSize(R.id.todo_check, TypedValue.COMPLEX_UNIT_SP, Math.max(14, textSize + 2));
             views.setTextViewTextSize(R.id.todo_clock, TypedValue.COMPLEX_UNIT_SP, Math.max(20, textSize + 4));
             views.setTextViewTextSize(R.id.todo_handle, TypedValue.COMPLEX_UNIT_SP, Math.max(15, textSize + 1));
+            views.setTextViewTextSize(R.id.todo_read_more, TypedValue.COMPLEX_UNIT_SP, Math.max(16, textSize));
             views.setViewPadding(R.id.todo_row_root, 0, dp(rowPadding), 0, dp(rowPadding));
 
             long reminderAt = position < reminders.size() ? reminders.get(position) : 0L;
-            views.setViewVisibility(R.id.todo_clock, reminderAt > System.currentTimeMillis() ? View.VISIBLE : View.GONE);
+            boolean clockVisible = reminderAt > System.currentTimeMillis();
+            views.setViewVisibility(R.id.todo_clock, clockVisible ? View.VISIBLE : View.GONE);
+            boolean overflows = isTooLong(items.get(position), textSize, clockVisible);
+            views.setViewVisibility(R.id.todo_read_more, overflows ? View.VISIBLE : View.GONE);
 
             Intent add = new Intent();
             add.setAction(LockTodoWidget.ACTION_ADD);
@@ -88,6 +100,11 @@ public class TodoRemoteViewsService extends RemoteViewsService {
             edit.setAction(LockTodoWidget.ACTION_EDIT);
             edit.putExtra(LockTodoWidget.EXTRA_INDEX, position);
             views.setOnClickFillInIntent(R.id.todo_text, edit);
+
+            Intent read = new Intent();
+            read.setAction(LockTodoWidget.ACTION_READ_TEXT);
+            read.putExtra(LockTodoWidget.EXTRA_INDEX, position);
+            views.setOnClickFillInIntent(R.id.todo_read_more, read);
 
             Intent complete = new Intent();
             complete.setAction(LockTodoWidget.ACTION_COMPLETE);
@@ -116,6 +133,28 @@ public class TodoRemoteViewsService extends RemoteViewsService {
 
         @Override public boolean hasStableIds() {
             return true;
+        }
+
+        private boolean isTooLong(String text, int textSizeSp, boolean clockVisible) {
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+            paint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, textSizeSp,
+                    context.getResources().getDisplayMetrics()));
+
+            // The launcher owns widget sizing; use its last known available
+            // width and reserve the checkbox, reorder handle and optional clock.
+            int widthDp = 280;
+            if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                Bundle options = AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId);
+                if (options != null) {
+                    widthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, widthDp);
+                }
+            }
+            int paddingDp = prefs.getInt(AppPrefs.KEY_HORIZONTAL_PADDING, 8);
+            float availablePx = dp(Math.max(42, widthDp - paddingDp * 2
+                    - 34 /* checkbox */ - 34 /* reorder */
+                    - (clockVisible ? 34 : 0) - 16 /* text padding and safety */));
+            return paint.measureText(text) > availablePx;
         }
 
         private int dp(int value) {

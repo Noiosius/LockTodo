@@ -10,6 +10,8 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.SystemClock;
+import android.os.Bundle;
+import android.content.res.Configuration;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.TypedValue;
@@ -212,10 +214,26 @@ public class LockTodoWidget extends AppWidgetProvider {
         boolean showPlus = prefs.getBoolean(AppPrefs.KEY_SHOW_PLUS, true);
         boolean hidePlusWhenEmpty = prefs.getBoolean(AppPrefs.KEY_HIDE_PLUS_WHEN_EMPTY, true);
         boolean plusVisible = showPlus && !(empty && hidePlusWhenEmpty);
-        views.setViewVisibility(R.id.add_row, plusVisible ? View.VISIBLE : View.GONE);
+        Bundle options = manager.getAppWidgetOptions(appWidgetId);
+        boolean landscape = context.getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE;
+        int minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0);
+        int maxHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, minHeight);
+        int heightDp = landscape ? minHeight : maxHeight;
+        if (heightDp <= 0) heightDp = Math.max(minHeight, maxHeight);
+        int rowHeight = 40 + 2 * Math.max(0, prefs.getInt(AppPrefs.KEY_ROW_PADDING, 5));
+        boolean overflow = heightDp > 0
+                && (long) items.size() * rowHeight > Math.max(0, heightDp - (plusVisible ? 32 : 0));
+        views.setViewVisibility(R.id.add_row, plusVisible || overflow ? View.VISIBLE : View.GONE);
         views.setViewVisibility(R.id.add_button, plusVisible ? View.VISIBLE : View.GONE);
+        views.setViewVisibility(R.id.overflow_indicator, overflow ? View.VISIBLE : View.GONE);
 
         int base = lightText ? 255 : 0;
+        views.setTextViewTextSize(R.id.overflow_indicator, TypedValue.COMPLEX_UNIT_SP,
+                prefs.getInt(AppPrefs.KEY_OVERFLOW_SIZE, 18));
+        views.setTextColor(R.id.overflow_indicator, Color.argb(
+                alpha255FromTransparency(prefs.getInt(AppPrefs.KEY_OVERFLOW_ALPHA, 70)),
+                base, base, base));
         int plusColor = Color.argb(
                 alpha255FromTransparency(prefs.getInt(AppPrefs.KEY_PLUS_ALPHA, 45)),
                 base, base, base

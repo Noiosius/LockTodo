@@ -24,6 +24,8 @@ final class AppPrefs {
     static final String KEY_HANDLE_ALPHA = "handle_alpha";
     static final String KEY_PLUS_SIZE = "plus_size_sp";
     static final String KEY_PLUS_ALPHA = "plus_alpha";
+    static final String KEY_OVERFLOW_SIZE = "overflow_size_sp";
+    static final String KEY_OVERFLOW_ALPHA = "overflow_alpha";
     static final String KEY_CHECK_DELAY = "check_delay_ms";
     static final String KEY_CHECKING_INDEX = "checking_index";
 

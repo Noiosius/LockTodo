@@ -53,6 +53,7 @@ public class QuickTodoActivity extends Activity {
     private boolean afterAlarm = false;
     private String expectedText;
     private long lastCircleTap = -1L;
+    private boolean completing = false;
     private long lastOutsideTap = 0L;
     private boolean openPickerAfterPermission = false;
 
@@ -111,17 +112,28 @@ public class QuickTodoActivity extends Activity {
             circle.setContentDescription("할 일 완료: 두 번 탭");
             row.addView(circle, new LinearLayout.LayoutParams(dp(34), dp(46)));
             circle.setOnClickListener(v -> {
+                if (completing) return;
                 long now = SystemClock.elapsedRealtime();
                 if (lastCircleTap >= 0L && now - lastCircleTap <= 500L) {
-                    int index = resolveAlarmItem();
-                    if (index >= 0 && new TodoStore(this).removeAtIfMatches(index, expectedText)) {
-                        circle.setText("●");
-                        LockTodoWidget.updateAll(this);
-                        ReminderScheduler.reschedule(this);
+                    if (resolveAlarmItem() < 0) {
                         finish();
-                    } else {
-                        finish();
+                        return;
                     }
+                    completing = true;
+                    circle.setText("●");
+                    // Keep the completed state visible for the same duration as the widget.
+                    for (int i = 0; i < row.getChildCount(); i++) {
+                        row.getChildAt(i).setEnabled(false);
+                    }
+                    int delay = Math.max(0, prefs.getInt(AppPrefs.KEY_CHECK_DELAY, 300));
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        int index = resolveAlarmItem();
+                        if (index >= 0 && new TodoStore(this).removeAtIfMatches(index, expectedText)) {
+                            LockTodoWidget.updateAll(this);
+                            ReminderScheduler.reschedule(this);
+                        }
+                        finish();
+                    }, delay);
                 } else {
                     lastCircleTap = now;
                 }
@@ -219,6 +231,7 @@ public class QuickTodoActivity extends Activity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (completing) return true;
         if (ev.getActionMasked() == MotionEvent.ACTION_OUTSIDE) {
             long now = SystemClock.elapsedRealtime();
             if (now - lastOutsideTap <= 420L) {
@@ -241,6 +254,7 @@ public class QuickTodoActivity extends Activity {
     }
 
     private void openReminderPickerWithPermissionCheck() {
+        if (completing) return;
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             openPickerAfterPermission = true;
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
@@ -681,6 +695,7 @@ public class QuickTodoActivity extends Activity {
     }
 
     private void save() {
+        if (completing) return;
         String text = input.getText().toString().trim();
         TodoStore store = new TodoStore(this);
 

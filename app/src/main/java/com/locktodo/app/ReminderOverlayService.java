@@ -33,6 +33,7 @@ public class ReminderOverlayService extends Service {
     private View overlayView;
     private ImageView knobIcon;
     private int itemIndex = -1;
+    private String alarmText;
 
     private float dragStartX;
     private float knobStartTranslation;
@@ -43,6 +44,7 @@ public class ReminderOverlayService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String text = intent == null ? "" : intent.getStringExtra(EXTRA_TEXT);
         itemIndex = intent == null ? -1 : intent.getIntExtra(EXTRA_ITEM_INDEX, -1);
+        alarmText = text;
         startForeground(FOREGROUND_ID, buildNotification(text));
 
         if (!Settings.canDrawOverlays(this)) {
@@ -204,8 +206,7 @@ public class ReminderOverlayService extends Service {
                 float translation = knob.getTranslationX();
                 if (translation >= actionThreshold) {
                     ReminderVibrationService.stop(this);
-                    removeOverlay();
-                    stopSelf();
+                    openAfterAlarm();
                 } else if (translation <= -actionThreshold) {
                     ReminderVibrationService.stop(this);
                     openReschedule();
@@ -230,6 +231,22 @@ public class ReminderOverlayService extends Service {
                 translation > 0f ? R.drawable.ic_delete_small : R.drawable.ic_clock_drag
         );
         knobIcon.setVisibility(View.VISIBLE);
+    }
+
+    private void openAfterAlarm() {
+        try {
+            if (itemIndex >= 0) {
+                Intent intent = new Intent(this, QuickTodoActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.putExtra(QuickTodoActivity.EXTRA_EDIT_INDEX, itemIndex);
+                intent.putExtra(QuickTodoActivity.EXTRA_AFTER_ALARM, true);
+                intent.putExtra(QuickTodoActivity.EXTRA_EXPECTED_TEXT, alarmText);
+                startActivity(intent);
+            }
+        } finally {
+            removeOverlay();
+            stopSelf();
+        }
     }
 
     private void openReschedule() {

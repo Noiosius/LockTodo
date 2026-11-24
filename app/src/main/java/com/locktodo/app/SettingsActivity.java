@@ -145,6 +145,8 @@ public class SettingsActivity extends Activity {
         toggle("할 일이 없을 때 + 숨기기", AppPrefs.KEY_HIDE_PLUS_WHEN_EMPTY, true);
         slider("+ 버튼 크기", AppPrefs.KEY_PLUS_SIZE, 10, 28, 17, "sp");
         slider("+ 버튼 투명도", AppPrefs.KEY_PLUS_ALPHA, 0, 100, 45, "%");
+        slider("··· 크기", AppPrefs.KEY_OVERFLOW_SIZE, 10, 28, 18, "sp");
+        slider("··· 투명도", AppPrefs.KEY_OVERFLOW_ALPHA, 0, 100, 70, "%");
         slider("완료 표시 후 제거 지연", AppPrefs.KEY_CHECK_DELAY, 0, 3000, 300, "ms");
         toggle("완료할 때 진동", AppPrefs.KEY_HAPTIC, true);
 

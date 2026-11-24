@@ -171,7 +171,7 @@ public class ReminderPopupActivity extends Activity {
                 float translation = knob.getTranslationX();
                 if (translation >= actionThreshold) {
                     ReminderVibrationService.stop(this);
-                    finish();
+                    openAfterAlarm();
                 } else if (translation <= -actionThreshold) {
                     ReminderVibrationService.stop(this);
                     openReschedule();
@@ -196,6 +196,18 @@ public class ReminderPopupActivity extends Activity {
                 translation > 0f ? R.drawable.ic_delete_small : R.drawable.ic_clock_drag
         );
         knobIcon.setVisibility(View.VISIBLE);
+    }
+
+    private void openAfterAlarm() {
+        if (itemIndex >= 0) {
+            Intent intent = new Intent(this, QuickTodoActivity.class);
+            intent.putExtra(QuickTodoActivity.EXTRA_EDIT_INDEX, itemIndex);
+            intent.putExtra(QuickTodoActivity.EXTRA_AFTER_ALARM, true);
+            intent.putExtra(QuickTodoActivity.EXTRA_EXPECTED_TEXT,
+                    getIntent().getStringExtra(ReminderReceiver.EXTRA_REMINDER_TEXT));
+            startActivity(intent);
+        }
+        finish();
     }
 
     private void openReschedule() {

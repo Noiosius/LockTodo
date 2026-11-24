@@ -40,14 +40,19 @@ import java.util.Locale;
 public class QuickTodoActivity extends Activity {
     public static final String EXTRA_EDIT_INDEX = "edit_index";
     public static final String EXTRA_REMINDER_ONLY = "reminder_only";
+    public static final String EXTRA_AFTER_ALARM = "after_alarm";
+    public static final String EXTRA_EXPECTED_TEXT = "expected_text";
     private static final int REQUEST_NOTIFICATIONS = 4701;
 
     private EditText input;
     private TextView reminderButton;
     private int editIndex = -1;
     private long selectedReminderAt = 0L;
-    private boolean selectedReminderVibrate = false;
+    private boolean selectedReminderVibrate = true;
     private boolean reminderOnly = false;
+    private boolean afterAlarm = false;
+    private String expectedText;
+    private long lastCircleTap = -1L;
     private long lastOutsideTap = 0L;
     private boolean openPickerAfterPermission = false;
 
@@ -56,6 +61,8 @@ public class QuickTodoActivity extends Activity {
         super.onCreate(savedInstanceState);
         setShowWhenLocked(true);
         setFinishOnTouchOutside(false);
+        afterAlarm = getIntent().getBooleanExtra(EXTRA_AFTER_ALARM, false);
+        expectedText = getIntent().getStringExtra(EXTRA_EXPECTED_TEXT);
 
         Window window = getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
@@ -66,7 +73,8 @@ public class QuickTodoActivity extends Activity {
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         );
         window.setSoftInputMode(
-                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE |
+                (afterAlarm ? WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+                        : WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE) |
                 WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         );
 
@@ -90,6 +98,35 @@ public class QuickTodoActivity extends Activity {
         bg.setCornerRadius(dp(17));
         bg.setStroke(dp(1), light ? Color.argb(72, 255, 255, 255) : Color.argb(58, 0, 0, 0));
         row.setBackground(bg);
+
+        if (afterAlarm) {
+            TextView circle = new TextView(this);
+            circle.setText("○");
+            circle.setTextSize(20);
+            int alpha = Math.round((100 - Math.max(0, Math.min(100,
+                    prefs.getInt(AppPrefs.KEY_CHECK_ALPHA, 10)))) * 2.55f);
+            circle.setTextColor(light ? Color.argb(alpha, 255, 255, 255)
+                    : Color.argb(alpha, 0, 0, 0));
+            circle.setGravity(Gravity.CENTER);
+            circle.setContentDescription("할 일 완료: 두 번 탭");
+            row.addView(circle, new LinearLayout.LayoutParams(dp(34), dp(46)));
+            circle.setOnClickListener(v -> {
+                long now = SystemClock.elapsedRealtime();
+                if (lastCircleTap >= 0L && now - lastCircleTap <= 500L) {
+                    int index = resolveAlarmItem();
+                    if (index >= 0 && new TodoStore(this).removeAtIfMatches(index, expectedText)) {
+                        circle.setText("●");
+                        LockTodoWidget.updateAll(this);
+                        ReminderScheduler.reschedule(this);
+                        finish();
+                    } else {
+                        finish();
+                    }
+                } else {
+                    lastCircleTap = now;
+                }
+            });
+        }
 
         reminderButton = new TextView(this);
         reminderButton.setText("◷");
@@ -132,14 +169,22 @@ public class QuickTodoActivity extends Activity {
 
         editIndex = getIntent().getIntExtra(EXTRA_EDIT_INDEX, -1);
         reminderOnly = getIntent().getBooleanExtra(EXTRA_REMINDER_ONLY, false);
+        if (afterAlarm) {
+            editIndex = resolveAlarmItem();
+            if (editIndex < 0) {
+                finish();
+                return;
+            }
+        }
         if (editIndex >= 0) {
             TodoStore store = new TodoStore(this);
             List<String> items = store.load();
             if (editIndex < items.size()) {
                 input.setText(items.get(editIndex));
-                input.setSelection(input.length());
+                input.setSelection(afterAlarm ? 0 : input.length());
                 selectedReminderAt = store.getReminderAt(editIndex);
-                selectedReminderVibrate = store.getReminderVibrate(editIndex);
+                selectedReminderVibrate = selectedReminderAt > 0L
+                        ? store.getReminderVibrate(editIndex) : true;
             } else {
                 editIndex = -1;
             }
@@ -156,7 +201,11 @@ public class QuickTodoActivity extends Activity {
             return false;
         });
 
-        if (reminderOnly && editIndex >= 0) {
+        if (afterAlarm) {
+            outer.setFocusableInTouchMode(true);
+            outer.requestFocus();
+            input.clearFocus();
+        } else if (reminderOnly && editIndex >= 0) {
             input.clearFocus();
             input.postDelayed(this::openReminderPickerWithPermissionCheck, 120L);
         } else {
@@ -374,7 +423,7 @@ public class QuickTodoActivity extends Activity {
         clear.setOnClickListener(v -> {
             if (selectedReminderAt > 0L) {
                 selectedReminderAt = 0L;
-                selectedReminderVibrate = false;
+                selectedReminderVibrate = true;
                 updateReminderButton();
                 dialog.dismiss();
             }
@@ -616,9 +665,33 @@ public class QuickTodoActivity extends Activity {
                 : Color.argb(alpha, 0, 0, 0));
     }
 
+    private int resolveAlarmItem() {
+        if (expectedText == null) return -1;
+        List<String> items = new TodoStore(this).load();
+        if (editIndex >= 0 && editIndex < items.size()
+                && expectedText.equals(items.get(editIndex))) return editIndex;
+        int found = -1;
+        for (int i = 0; i < items.size(); i++) {
+            if (expectedText.equals(items.get(i))) {
+                if (found >= 0) return -1;
+                found = i;
+            }
+        }
+        return found;
+    }
+
     private void save() {
         String text = input.getText().toString().trim();
         TodoStore store = new TodoStore(this);
+
+        if (afterAlarm) {
+            editIndex = resolveAlarmItem();
+            if (editIndex < 0) {
+                finish();
+                return;
+            }
+            if (text.isEmpty()) return;
+        }
 
         if (editIndex >= 0) {
             store.replaceAt(editIndex, text, selectedReminderAt, selectedReminderVibrate);
@@ -640,7 +713,7 @@ public class QuickTodoActivity extends Activity {
         }
 
         selectedReminderAt = 0L;
-        selectedReminderVibrate = false;
+        selectedReminderVibrate = true;
         updateReminderButton();
         input.setText("");
         input.requestFocus();
